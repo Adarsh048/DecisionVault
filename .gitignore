@@ -5,13 +5,32 @@ node_modules/
 
 # Environment Variables & Secrets
 .env
-.env.example
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-# Ensure example templates remain tracked
+.env*
+*.env
+*.env.*
 !.env.example
+!*.env.example
+
+# Secret keys, credentials & certificates
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.keystore
+*serviceAccountKey*.json
+*service-account*.json
+*credentials*.json
+*secret*.json
+id_rsa*
+id_ed25519*
+secrets/
+
+# Vercel & Deployment
+.vercel/
+.output/
+.turbo/
 
 # Production & Build Outputs
 dist/
