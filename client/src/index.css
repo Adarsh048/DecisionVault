@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Warm, clean neutral palette */
+    --background: 60 9% 98%;          /* #FAFAF8 */
+    --foreground: 60 4% 11%;          /* #1C1C1A */
+    
+    --card: 0 0% 100%;                /* #FFFFFF */
+    --card-foreground: 60 4% 11%;     /* #1C1C1A */
+    
+    --popover: 0 0% 100%;             /* #FFFFFF */
+    --popover-foreground: 60 4% 11%;  /* #1C1C1A */
+    
+    /* Primary Accent: Deep Refined Forest Green */
+    --primary: 154 26% 28%;           /* #365B4B */
+    --primary-foreground: 0 0% 100%;  /* #FFFFFF */
+    --primary-hover: 153 27% 22%;     /* #29483A */
+    --primary-light: 140 24% 92%;     /* #E7F0EA */
+    
+    /* Secondary & Muted Surfaces */
+    --secondary: 60 9% 95.5%;         /* #F5F5F2 */
+    --secondary-foreground: 60 4% 11%;/* #1C1C1A */
+    
+    --muted: 60 9% 95.5%;            /* #F5F5F2 */
+    --muted-foreground: 60 2% 41%;   /* #6B6B66 */
+    
+    --accent: 140 24% 92%;            /* #E7F0EA */
+    --accent-foreground: 153 27% 22%; /* #29483A */
+    
+    /* Status Colors: Restrained, mature, light backgrounds */
+    --destructive: 0 72% 51%;         /* Soft Red */
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 45% 34%;           /* Muted Forest Green */
+    --success-foreground: 0 0% 100%;
+    --warning: 36 82% 42%;            /* Soft Warm Amber */
+    --warning-foreground: 0 0% 100%;
+    
+    /* Borders & Inputs */
+    --border: 60 8% 90%;              /* #E8E8E3 */
+    --input: 60 8% 90%;               /* #E8E8E3 */
+    --ring: 154 26% 28%;              /* #365B4B */
+    --radius: 0.5rem;                 /* 8px */
+    
+    /* Sidebar: Clean, quiet, neutral */
+    --sidebar-background: 60 9% 97.2%;/* #F8F8F6 */
+    --sidebar-foreground: 60 2% 41%;  /* #6B6B66 */
+    --sidebar-primary: 154 26% 28%;   /* #365B4B */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 140 24% 92%;    /* #E7F0EA */
+    --sidebar-accent-foreground: 153 27% 22%; /* #29483A */
+    --sidebar-border: 60 8% 90%;      /* #E8E8E3 */
+    --sidebar-ring: 154 26% 28%;
+  }
+
+  .dark {
+    /* Refined charcoal / slate dark mode */
+    --background: 220 13% 10%;        /* #16181D */
+    --foreground: 220 10% 92%;        /* #E8EAEF */
+    --card: 220 12% 13%;              /* #1D2026 */
+    --card-foreground: 220 10% 92%;
+    --popover: 220 12% 13%;
+    --popover-foreground: 220 10% 92%;
+    --primary: 154 32% 44%;           /* Muted Sage Forest Green */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 154 35% 38%;
+    --primary-light: 154 20% 18%;
+    --secondary: 220 10% 17%;
+    --secondary-foreground: 220 10% 92%;
+    --muted: 220 10% 17%;
+    --muted-foreground: 220 8% 60%;
+    --accent: 154 20% 18%;
+    --accent-foreground: 154 40% 75%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 45% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 75% 45%;
+    --warning-foreground: 0 0% 100%;
+    --border: 220 10% 18%;
+    --input: 220 10% 18%;
+    --ring: 154 32% 44%;
+    --sidebar-background: 220 14% 9%;
+    --sidebar-foreground: 220 8% 62%;
+    --sidebar-primary: 154 32% 44%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 10% 15%;
+    --sidebar-accent-foreground: 220 10% 92%;
+    --sidebar-border: 220 10% 16%;
+    --sidebar-ring: 154 32% 44%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    letter-spacing: -0.011em;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Subtle minimal scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
