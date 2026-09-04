@@ -17,9 +17,15 @@ const REFRESH_TOKEN_COOKIE = 'dv_refresh_token';
 const cookieOptions = {
   httpOnly: true,          // Not accessible via JavaScript (XSS protection)
   secure: env.NODE_ENV === 'production', // HTTPS only in production
-  sameSite: 'lax' as const,
+  sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
   path: '/api/v1/auth',    // Only sent to auth endpoints
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
+
+const clearCookieOptions = {
+  path: '/api/v1/auth',
+  secure: env.NODE_ENV === 'production',
+  sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
 };
 
 // ─── Register ────────────────────────────────────────────────────────────────
@@ -78,7 +84,7 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
     }
 
     // Clear the cookie
-    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/v1/auth' });
+    res.clearCookie(REFRESH_TOKEN_COOKIE, clearCookieOptions);
 
     ApiResponse.success({
       res,
@@ -119,7 +125,7 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
     });
   } catch (err) {
     // Clear cookie on failure
-    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/v1/auth' });
+    res.clearCookie(REFRESH_TOKEN_COOKIE, clearCookieOptions);
     next(err);
   }
 }
@@ -142,7 +148,7 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
     await authService.resetPassword(req.body.token, req.body.password);
 
     // Clear cookie since all sessions were invalidated
-    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/v1/auth' });
+    res.clearCookie(REFRESH_TOKEN_COOKIE, clearCookieOptions);
 
     ApiResponse.success({
       res,
