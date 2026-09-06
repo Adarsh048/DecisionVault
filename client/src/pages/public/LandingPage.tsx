@@ -1,15 +1,31 @@
 import { Link } from 'react-router-dom';
 import { APP_NAME } from '@/lib/constants';
 import { Logo } from '@/components/ui/Logo';
-import { ArrowRight, Shield, Layers, RefreshCw } from 'lucide-react';
+import { ArrowRight, Shield, Layers, RefreshCw, Sun, Moon } from 'lucide-react';
+import { useUIStore } from '@/store/uiStore';
 
 export function LandingPage() {
+  const { theme, setTheme } = useUIStore();
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-[#FAFAF8] dark:bg-[#111216] text-[#1C1C1A] dark:text-[#E8EAEF]">
       {/* Nav */}
       <header className="flex h-16 items-center justify-between border-b border-[#E8E8E3] dark:border-[#2B2E36] px-6 lg:px-12 bg-[#FFFFFF] dark:bg-[#16181D]">
         <Logo size="md" href="/" />
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-3 sm:gap-4">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#1D2026] text-[#6B6B66] hover:text-[#1C1C1A] dark:text-[#9E9EA8] dark:hover:text-[#E8EAEF] transition-colors shadow-xs"
+            aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4 text-[#F3B367]" /> : <Moon className="h-4 w-4" />}
+          </button>
           <Link
             to="/login"
             className="text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] hover:text-[#1C1C1A] dark:hover:text-[#E8EAEF] transition-colors"
@@ -52,7 +68,7 @@ export function LandingPage() {
             </Link>
             <Link
               to="/login"
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-6 text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] transition-colors"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-6 text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B] transition-colors"
             >
               Sign in to Account
             </Link>
