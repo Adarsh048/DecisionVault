@@ -100,16 +100,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError as AxiosError, null);
-        useAuthStore.getState().logout();
-
-        // Only redirect if the user is currently on a protected route (/app/*)
-        // and NOT already on a public/auth route (prevents infinite reload loops)
-        if (
-          window.location.pathname.startsWith('/app') &&
-          window.location.pathname !== '/login'
-        ) {
-          window.location.href = '/login';
-        }
+        useAuthStore.getState().setSessionExpired(true);
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

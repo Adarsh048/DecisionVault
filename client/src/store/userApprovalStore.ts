@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Role } from '@/lib/constants';
 import { organizationService } from '@/services/organizationService';
+import { useAuthStore } from './authStore';
 
 export interface PendingUserApproval {
   id: string;
@@ -45,8 +46,23 @@ export const useUserApprovalStore = create<UserApprovalStore>()(
             status: 'pending' as const,
             assignedRole: p.role,
             assignedTeam: p.team,
-          }));
+          })).sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime());
           set({ approvals: livePending, isLoading: false });
+
+          // Also sync active status for current user if present in members
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser) {
+            const currentMember = (data.members || []).find(
+              (m) => m.userId === currentUser._id || m.email.toLowerCase() === currentUser.email.toLowerCase()
+            );
+            if (currentMember) {
+              useAuthStore.getState().setUser({
+                ...currentUser,
+                role: currentMember.role,
+                membershipStatus: 'active',
+              });
+            }
+          }
         } catch {
           set({ isLoading: false });
         }

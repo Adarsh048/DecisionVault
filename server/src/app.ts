@@ -24,7 +24,9 @@ export function createApp(): express.Application {
 
       const isAllowed =
         origin === env.CLIENT_URL ||
-        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/.*(\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/.test(origin);
 
       if (isAllowed) {
         callback(null, true);

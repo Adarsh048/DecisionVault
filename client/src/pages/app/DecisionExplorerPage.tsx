@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search,
   Plus,
@@ -13,13 +13,33 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 
 export function DecisionExplorerPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { decisions } = useDecisionStore();
   const permissions = usePermissions();
 
+  const urlStatus = searchParams.get('status');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(urlStatus || 'all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'votes'>('newest');
+
+  useEffect(() => {
+    const currentUrlStatus = searchParams.get('status');
+    if (currentUrlStatus && currentUrlStatus !== statusFilter) {
+      setStatusFilter(currentUrlStatus);
+    }
+  }, [searchParams]);
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    const newParams = new URLSearchParams(searchParams);
+    if (newStatus === 'all') {
+      newParams.delete('status');
+    } else {
+      newParams.set('status', newStatus);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
 
   // Extract unique teams
   const availableTeams = useMemo(() => {
@@ -72,27 +92,29 @@ export function DecisionExplorerPage() {
           </p>
         </div>
 
-        {permissions.canCreateDecisions ? (
-          <button
-            type="button"
-            onClick={() => navigate('/app/decisions/new')}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-4 py-2 text-xs font-semibold text-white shadow-subtle transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>New Decision</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5 rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#F5F5F2] dark:bg-[#1D2026] px-3 py-1.5 text-xs text-[#969690]">
-            <Lock className="h-3.5 w-3.5" />
-            <span>Stakeholder (Read-Only)</span>
-          </div>
-        )}
+        <div className="w-full sm:w-auto">
+          {permissions.canCreateDecisions ? (
+            <button
+              type="button"
+              onClick={() => navigate('/app/decisions/new')}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-4 py-2 text-xs font-semibold text-white shadow-subtle transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Decision</span>
+            </button>
+          ) : (
+            <div className="flex items-center justify-center gap-1.5 rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#F5F5F2] dark:bg-[#1D2026] px-3 py-2 text-xs text-[#969690] w-full sm:w-auto">
+              <Lock className="h-3.5 w-3.5" />
+              <span>Stakeholder (Read-Only)</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ─── Search & Filters Bar ─────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative w-full md:flex-1 md:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#969690]" />
           <input
             type="text"
@@ -104,12 +126,12 @@ export function DecisionExplorerPage() {
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="grid grid-cols-1 xs:grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 text-xs w-full md:w-auto">
           {/* Status Filter */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
+            onChange={(e) => handleStatusFilterChange(e.target.value)}
+            className="w-full sm:w-auto rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
           >
             <option value="all">All Statuses</option>
             <option value="accepted">Accepted</option>
@@ -122,7 +144,7 @@ export function DecisionExplorerPage() {
           <select
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            className="rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
+            className="w-full sm:w-auto rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
           >
             <option value="all">All Teams</option>
             {availableTeams.map((t) => (
@@ -136,7 +158,7 @@ export function DecisionExplorerPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
+            className="w-full sm:w-auto rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-2.5 py-1.5 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] focus:border-[#365B4B] focus:outline-none"
           >
             <option value="newest">Recently Updated</option>
             <option value="oldest">Oldest First</option>
@@ -153,24 +175,24 @@ export function DecisionExplorerPage() {
               <Link
                 key={d.id}
                 to={`/app/decisions/${d.id}`}
-                className="group flex flex-col gap-3 p-4 transition-colors hover:bg-[#F5F5F2] dark:hover:bg-[#1D2026] md:flex-row md:items-center md:justify-between"
+                className="group flex flex-col gap-3 p-4 transition-colors hover:bg-[#F5F5F2] dark:hover:bg-[#1D2026] sm:flex-row sm:items-center sm:justify-between"
               >
                 {/* Left info */}
-                <div className="space-y-1.5 min-w-0 pr-4">
+                <div className="space-y-1.5 min-w-0 pr-0 sm:pr-4">
                   <div className="flex items-center gap-2.5">
                     <span className="font-mono text-xs text-[#969690] shrink-0">
                       ADR-{String(d.number).padStart(3, '0')}
                     </span>
-                    <span className="text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] group-hover:text-[#365B4B] dark:group-hover:text-[#78C295] transition-colors">
+                    <span className="text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] group-hover:text-[#365B4B] dark:group-hover:text-[#78C295] transition-colors truncate">
                       {d.title}
                     </span>
                   </div>
 
-                  <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8] line-clamp-1">
+                  <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8] line-clamp-2 sm:line-clamp-1">
                     {d.decision || d.context}
                   </p>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5">
                     {d.tags.map((tag) => (
                       <span
                         key={tag}
@@ -183,7 +205,7 @@ export function DecisionExplorerPage() {
                 </div>
 
                 {/* Right metadata */}
-                <div className="flex items-center gap-4 shrink-0 pt-2 md:pt-0 border-t border-[#E8E8E3]/60 dark:border-[#2B2E36]/60 md:border-t-0">
+                <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 pt-2 sm:pt-0 border-t border-[#E8E8E3]/60 dark:border-[#2B2E36]/60 sm:border-t-0">
                   <StatusBadge status={d.status} size="sm" />
 
                   <div className="text-right hidden sm:block">

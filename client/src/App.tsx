@@ -5,6 +5,7 @@ import { router } from '@/routes';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 import { authService } from '@/services/authService';
+import { SessionExpiredModal } from '@/components/ui/SessionExpiredModal';
 
 /**
  * TanStack Query client configuration.
@@ -26,7 +27,7 @@ const queryClient = new QueryClient({
 /**
  * Root application component.
  * Initializes auth state on mount by attempting a token refresh,
- * and applies the persisted theme setting.
+ * applies the persisted theme setting, and mounts the SessionExpiredModal.
  */
 export default function App() {
   const { setAuth, setLoading, logout } = useAuthStore();
@@ -36,20 +37,46 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     async function initAuth() {
+      const state = useAuthStore.getState();
+
+      // Case 1: Session already stored in localStorage
+      if (state.accessToken && state.user) {
+        try {
+          // Validate current token & get updated role from server
+          const res = await authService.getMe();
+          if (isMounted && res.data?.user) {
+            useAuthStore.getState().setUser(res.data.user);
+          }
+        } catch {
+          // Access token might have expired; try refreshing with cookie
+          try {
+            const refreshRes = await authService.refreshToken();
+            if (isMounted && refreshRes.data) {
+              setAuth(refreshRes.data.user, refreshRes.data.accessToken);
+            }
+          } catch {
+            // Both access token and refresh token failed
+            if (isMounted) {
+              logout();
+            }
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
+        return;
+      }
+
+      // Case 2: No session in localStorage, check if refresh cookie exists
       try {
         setLoading(true);
         const res = await authService.refreshToken();
-        if (isMounted) {
-          if (res.data) {
-            setAuth(res.data.user, res.data.accessToken);
-          } else {
-            logout();
-          }
+        if (isMounted && res.data) {
+          setAuth(res.data.user, res.data.accessToken);
         }
       } catch {
-        if (isMounted) {
-          logout();
-        }
+        // No existing session; remain logged out
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -61,6 +88,39 @@ export default function App() {
       isMounted = false;
     };
   }, [setAuth, setLoading, logout]);
+
+  // ─── Monitor session expiration ─────────────────────────────────────────
+  useEffect(() => {
+    const checkTokenExpiration = () => {
+      const { accessToken, isAuthenticated, isSessionExpired } = useAuthStore.getState();
+      if (!isAuthenticated || !accessToken || isSessionExpired) return;
+
+      try {
+        const parts = accessToken.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          if (payload.exp && Date.now() >= payload.exp * 1000) {
+            // Token expired; attempt token refresh
+            authService.refreshToken()
+              .then((res) => {
+                if (res.data?.accessToken) {
+                  useAuthStore.getState().setAccessToken(res.data.accessToken);
+                }
+              })
+              .catch(() => {
+                // Refresh failed; trigger session expired dialog
+                useAuthStore.getState().setSessionExpired(true);
+              });
+          }
+        }
+      } catch {
+        // Ignore parsing errors
+      }
+    };
+
+    const interval = setInterval(checkTokenExpiration, 20 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ─── Apply theme on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -79,6 +139,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <SessionExpiredModal />
     </QueryClientProvider>
   );
 }

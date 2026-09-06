@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Lock,
   Save,
+  WifiOff,
+  Check,
 } from 'lucide-react';
 import { useDecisionStore } from '@/store/decisionStore';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useSyncStore } from '@/store/syncStore';
+import { db } from '@/lib/db';
+import { socketService } from '@/services/socketService';
 import type { DecisionStatus } from '@/lib/constants';
 
 export function CreateDecisionPage() {
@@ -15,6 +20,7 @@ export function CreateDecisionPage() {
   const { user } = useAuth();
   const permissions = usePermissions();
   const { addDecision } = useDecisionStore();
+  const sync = useSyncStore();
 
   const [title, setTitle] = useState('');
   const [team, setTeam] = useState('Platform Engineering');
@@ -24,6 +30,44 @@ export function CreateDecisionPage() {
   const [decision, setDecision] = useState('');
   const [consequences, setConsequences] = useState('');
   const [error, setError] = useState('');
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  // Hydrate draft from local IndexedDB if present
+  useEffect(() => {
+    db.drafts.get('new-decision-draft').then((draft) => {
+      if (draft && (draft.title || draft.context || draft.decision)) {
+        setTitle(draft.title || '');
+        setTeam(draft.team || 'Platform Engineering');
+        setStatus((draft.status as DecisionStatus) || 'proposed');
+        setTags(draft.tags ? draft.tags.join(', ') : 'Architecture, Platform, Infrastructure');
+        setContext(draft.context || '');
+        setDecision(draft.decision || '');
+        setConsequences(draft.consequences || '');
+        setDraftLoaded(true);
+      }
+    }).catch(console.error);
+  }, []);
+
+  // Autosave to IndexedDB draft table
+  useEffect(() => {
+    if (!title && !context && !decision) return;
+    const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
+    const timer = setTimeout(() => {
+      db.drafts.put({
+        id: 'new-decision-draft',
+        title,
+        team,
+        status,
+        tags: tagList,
+        context,
+        decision,
+        consequences,
+        updatedAt: new Date().toISOString(),
+      }).catch(console.error);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [title, team, status, tags, context, decision, consequences]);
 
   const handleSubmit = (e?: React.FormEvent, customStatus?: DecisionStatus) => {
     if (e) e.preventDefault();
@@ -58,6 +102,12 @@ export function CreateDecisionPage() {
       },
     });
 
+    // Clear local draft from IndexedDB
+    db.drafts.delete('new-decision-draft').catch(console.error);
+
+    // Broadcast real-time notification & synced record to all other connected teammates
+    socketService.broadcastNewDecision(created);
+
     navigate(`/app/decisions/${created.id}`);
   };
 
@@ -73,9 +123,29 @@ export function CreateDecisionPage() {
           <span>Back to Decisions</span>
         </Link>
 
-        <div className="flex items-center gap-2 text-xs text-[#6B6B66] dark:text-[#9E9EA8]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#365B4B]" />
-          <span>Autosaved locally</span>
+        <div className="flex items-center gap-3 text-xs">
+          {draftLoaded && (
+            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-[#275B3D] dark:text-[#78C295] bg-[#EBF5EE] dark:bg-[#192B21] px-2 py-0.5 rounded border border-[#C6E4D1] dark:border-[#284936]">
+              <Check className="h-3 w-3" />
+              <span>Draft restored from local vault</span>
+            </span>
+          )}
+
+          <div className="flex items-center gap-1.5 text-[#6B6B66] dark:text-[#9E9EA8]">
+            {!sync.isOnline || sync.status === 'offline' || sync.isSimulatedOffline ? (
+              <>
+                <WifiOff className="h-3 w-3 text-[#D97706]" />
+                <span className="text-[11px] text-[#9A5B13] dark:text-[#F3B367]">
+                  Offline · Saved in IndexedDB
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-[#365B4B]" />
+                <span className="text-[11px]">Autosaved to IndexedDB</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -221,29 +291,29 @@ export function CreateDecisionPage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-[#E8E8E3] dark:border-[#2B2E36]">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-6 border-t border-[#E8E8E3] dark:border-[#2B2E36]">
           <button
             type="button"
             onClick={() => navigate('/app/decisions')}
-            className="rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-4 py-2 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] hover:bg-[#F5F5F2] transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-4 py-2.5 sm:py-2 text-xs font-medium text-[#6B6B66] dark:text-[#9E9EA8] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B] transition-colors"
           >
             Cancel
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
             {permissions.canCreateDecisions && (
               <>
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, 'draft')}
-                  className="rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-4 py-2 text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] px-4 py-2.5 sm:py-2 text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B] transition-colors"
                 >
                   Save as Draft
                 </button>
 
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-5 py-2 text-xs font-semibold text-white shadow-subtle transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-5 py-2.5 sm:py-2 text-xs font-semibold text-white shadow-subtle transition-colors"
                 >
                   <Save className="h-3.5 w-3.5" />
                   <span>Publish Decision</span>

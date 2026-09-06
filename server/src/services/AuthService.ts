@@ -34,7 +34,7 @@ export class AuthService {
 
     // Auto-enroll new user in the workspace as a pending member awaiting Owner approval
     try {
-      const defaultOrg = await Organization.findOne({ slug: 'acme-corp' });
+      const defaultOrg = (await Organization.findOne({ slug: 'acme-corp' })) || (await Organization.findOne({}));
       if (defaultOrg) {
         defaultOrg.members.push({
           userId: user._id,
@@ -51,9 +51,10 @@ export class AuthService {
 
     // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(user);
+    const userPayload = await this.enrichUserWithRole(user);
 
     return {
-      user: user.toJSON(),
+      user: userPayload,
       accessToken,
       refreshToken,
     };
@@ -77,9 +78,10 @@ export class AuthService {
 
     // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(user);
+    const userPayload = await this.enrichUserWithRole(user);
 
     return {
-      user: user.toJSON(),
+      user: userPayload,
       accessToken,
       refreshToken,
     };
@@ -111,6 +113,13 @@ export class AuthService {
     const hashedToken = this.hashToken(refreshToken);
     const storedToken = user.refreshTokens.find((t) => t.token === hashedToken);
     if (!storedToken) {
+      // Concurrency guard: If user has a token created in the last 30s, do not revoke all sessions
+      const hasRecentTokens = user.refreshTokens.some(
+        (t) => (Date.now() - new Date(t.createdAt).getTime()) < 30000
+      );
+      if (hasRecentTokens) {
+        throw new UnauthorizedError('Token already rotated. Please use current session.');
+      }
       // Token reuse detected — possible theft. Invalidate all tokens.
       await userRepository.removeAllRefreshTokens(user._id.toString());
       throw new UnauthorizedError('Invalid refresh token. All sessions have been revoked for security.');
@@ -127,9 +136,10 @@ export class AuthService {
 
     // 6. Generate new token pair (rotation)
     const tokens = await this.generateTokens(user);
+    const userPayload = await this.enrichUserWithRole(user);
 
     return {
-      user: user.toJSON(),
+      user: userPayload,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
@@ -204,10 +214,40 @@ export class AuthService {
     if (!user) {
       throw new NotFoundError('User');
     }
-    return user.toJSON();
+    return this.enrichUserWithRole(user);
   }
 
   // ─── Private Helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Enrich user object with organization role and membership status.
+   */
+  private async enrichUserWithRole(user: IUser) {
+    const userJson: any = user.toJSON ? user.toJSON() : { ...user };
+    try {
+      const org = (await Organization.findOne({ slug: 'acme-corp' })) || (await Organization.findOne({}));
+      if (org) {
+        if (org.owner.toString() === user._id.toString()) {
+          userJson.role = 'owner';
+          userJson.membershipStatus = 'active';
+        } else {
+          const membership = org.members.find(
+            (m: any) => (m.userId?._id || m.userId)?.toString() === user._id.toString()
+          );
+          if (membership) {
+            userJson.role = membership.role;
+            userJson.membershipStatus = membership.status || 'active';
+          } else {
+            userJson.role = 'viewer';
+            userJson.membershipStatus = 'pending';
+          }
+        }
+      }
+    } catch {
+      // Keep defaults if lookup encounters an error
+    }
+    return userJson;
+  }
 
   /**
    * Generate access + refresh tokens and store the refresh token.

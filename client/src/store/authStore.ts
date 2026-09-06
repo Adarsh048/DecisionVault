@@ -7,12 +7,14 @@ interface AuthState {
   accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isSessionExpired: boolean;
 
   // Actions
   setAuth: (user: User, accessToken: string) => void;
   setAccessToken: (token: string) => void;
   setUser: (user: User) => void;
   setLoading: (loading: boolean) => void;
+  setSessionExpired: (expired: boolean) => void;
   logout: () => void;
 }
 
@@ -35,9 +37,10 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       isAuthenticated: false,
       isLoading: true,
+      isSessionExpired: false,
 
       setAuth: (user, accessToken) =>
-        set({ user, accessToken, isAuthenticated: true, isLoading: false }),
+        set({ user, accessToken, isAuthenticated: true, isLoading: false, isSessionExpired: false }),
 
       setAccessToken: (accessToken) => set({ accessToken }),
 
@@ -45,18 +48,29 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (isLoading) => set({ isLoading }),
 
+      setSessionExpired: (isSessionExpired) => set({ isSessionExpired }),
+
       logout: () =>
         set({ user: null, accessToken: null, isAuthenticated: false, isLoading: false }),
     }),
     {
       name: 'dv-auth',
-      storage: createJSONStorage(() => sessionStorage),
-      // Persist user and token in sessionStorage so page reload/navigation preserves session
+      storage: createJSONStorage(() => localStorage),
+      // Persist user and token in localStorage so page reload/navigation preserves session
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // If a persisted valid session exists, set loading to false immediately
+          if (state.accessToken && state.user) {
+            state.isAuthenticated = true;
+          }
+          state.isLoading = false;
+        }
+      },
     }
   )
 );

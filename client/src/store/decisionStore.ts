@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DecisionStatus } from '@/lib/constants';
+import { db } from '@/lib/db';
+import { syncEngine } from '@/services/syncEngine';
 
 export interface DecisionRecord {
   id: string;
@@ -27,7 +29,7 @@ export interface DecisionRecord {
   updatedAt: string;
 }
 
-const INITIAL_DECISIONS: DecisionRecord[] = [
+export const INITIAL_DECISIONS: DecisionRecord[] = [
   {
     id: 'dec-1',
     number: 1,
@@ -158,6 +160,7 @@ interface DecisionStore {
   setSelectedTeam: (team: string | null) => void;
   setSelectedTag: (tag: string | null) => void;
   addDecision: (decision: Omit<DecisionRecord, 'id' | 'number' | 'votes' | 'createdAt' | 'updatedAt'>) => DecisionRecord;
+  receiveRemoteDecision: (decision: DecisionRecord) => void;
   updateDecisionStatus: (id: string, status: DecisionStatus) => void;
   voteDecision: (id: string, type: 'up' | 'down') => void;
 }
@@ -186,19 +189,45 @@ export const useDecisionStore = create<DecisionStore>()(
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
+
+        // 1. Instant local state update (0ms latency)
         set({ decisions: [newRecord, ...current] });
+
+        // 2. Persist to IndexedDB
+        db.decisions.put({ ...newRecord, synced: false }).catch(console.error);
+
+        // 3. Queue to outbox for sync
+        syncEngine.enqueue('create_decision', newRecord).catch(console.error);
+
         return newRecord;
       },
 
+      receiveRemoteDecision: (remoteRecord) => {
+        const current = get().decisions;
+        const exists = current.some((d) => d.id === remoteRecord.id || (d.number === remoteRecord.number && d.title === remoteRecord.title));
+        if (!exists) {
+          set({ decisions: [remoteRecord, ...current] });
+          db.decisions.put({ ...remoteRecord, synced: true }).catch(console.error);
+        }
+      },
+
       updateDecisionStatus: (id, status) => {
+        const updatedAt = new Date().toISOString();
         set({
           decisions: get().decisions.map((d) =>
-            d.id === id ? { ...d, status, updatedAt: new Date().toISOString() } : d
+            d.id === id ? { ...d, status, updatedAt } : d
           ),
         });
+
+        // Persist to IndexedDB
+        db.decisions.update(id, { status, updatedAt, synced: false }).catch(console.error);
+
+        // Queue to outbox for sync
+        syncEngine.enqueue('update_status', { id, status, updatedAt }).catch(console.error);
       },
 
       voteDecision: (id, type) => {
+        let updatedVotes: DecisionRecord['votes'] | null = null;
         set({
           decisions: get().decisions.map((d) => {
             if (d.id !== id) return d;
@@ -210,7 +239,8 @@ export const useDecisionStore = create<DecisionStore>()(
               // Toggle off
               if (type === 'up') up = Math.max(0, up - 1);
               if (type === 'down') down = Math.max(0, down - 1);
-              return { ...d, votes: { up, down, userVote: undefined } };
+              updatedVotes = { up, down, userVote: undefined };
+              return { ...d, votes: updatedVotes };
             }
 
             if (currentVote === 'up') up = Math.max(0, up - 1);
@@ -219,9 +249,15 @@ export const useDecisionStore = create<DecisionStore>()(
             if (type === 'up') up += 1;
             if (type === 'down') down += 1;
 
-            return { ...d, votes: { up, down, userVote: type } };
+            updatedVotes = { up, down, userVote: type };
+            return { ...d, votes: updatedVotes };
           }),
         });
+
+        if (updatedVotes) {
+          db.decisions.update(id, { votes: updatedVotes }).catch(console.error);
+          syncEngine.enqueue('vote_decision', { id, type, votes: updatedVotes }).catch(console.error);
+        }
       },
     }),
     {

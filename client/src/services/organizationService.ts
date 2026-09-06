@@ -58,7 +58,17 @@ export const organizationService = {
     return res.data;
   },
 
+  async updateOrganization(
+    orgIdOrSlug: string,
+    data: { name?: string; slug?: string }
+  ): Promise<{ organization: any }> {
+    const target = orgIdOrSlug || 'acme-corp';
+    const res = await api.patch(`/organizations/${encodeURIComponent(target)}`, data);
+    return res.data.data;
+  },
+
   async removeMember(orgId: string, userId: string): Promise<void> {
-    await api.delete(`/organizations/${orgId}/members/${userId}`);
+    const target = orgId || 'acme-corp';
+    await api.delete(`/organizations/${encodeURIComponent(target)}/members/${userId}`);
   },
 };

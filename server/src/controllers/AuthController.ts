@@ -18,12 +18,12 @@ const cookieOptions = {
   httpOnly: true,          // Not accessible via JavaScript (XSS protection)
   secure: env.NODE_ENV === 'production', // HTTPS only in production
   sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
-  path: '/api/v1/auth',    // Only sent to auth endpoints
+  path: '/',               // Root path to ensure cookies are sent consistently
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
 const clearCookieOptions = {
-  path: '/api/v1/auth',
+  path: '/',
   secure: env.NODE_ENV === 'production',
   sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
 };

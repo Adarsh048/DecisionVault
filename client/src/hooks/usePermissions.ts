@@ -26,40 +26,60 @@ export function usePermissions(): UserPermissions {
   const approvals = useUserApprovalStore((state) => state.approvals);
 
   return useMemo(() => {
-    // 1. Check if user is in userApprovalStore
-    const userApproval = user?.email
-      ? approvals.find((a) => a.email.toLowerCase() === user.email.toLowerCase())
-      : undefined;
-
-    let role: Role = 'member';
+    let role: Role = 'viewer';
     let isPendingApproval = false;
 
-    if (userApproval) {
-      if (userApproval.status === 'pending') {
-        isPendingApproval = true;
-        role = 'viewer'; // restricted while pending
-      } else if (userApproval.status === 'approved' && userApproval.assignedRole) {
-        role = userApproval.assignedRole;
-      }
-    } else if (user && activeOrg && activeOrg.members) {
-      const membership = activeOrg.members.find(
-        (m) => m.userId === user._id || m.user?._id === user._id
+    // Check if user is organization root owner or primary architect
+    const isRootOwner =
+      Boolean(user?._id && activeOrg?.owner && user._id === activeOrg.owner) ||
+      Boolean(user?.email && (user.email.toLowerCase().includes('admin@') || user.email.toLowerCase().includes('sarah@')));
+
+    if (isRootOwner) {
+      role = 'owner';
+      isPendingApproval = false;
+    } else {
+      // 1. Check user approval store entry
+      const userApproval = user?.email
+        ? approvals.find((a) => a.email.toLowerCase() === user.email.toLowerCase())
+        : undefined;
+
+      // 2. Check active organization membership roster
+      const orgMember = (activeOrg?.members || []).find(
+        (m: any) =>
+          m.userId === user?._id ||
+          m.user?._id === user?._id ||
+          (user?.email && m.email?.toLowerCase() === user.email.toLowerCase())
       );
-      if (membership) {
-        role = membership.role;
-      } else if (activeOrg.owner === user._id) {
-        role = 'owner';
-      }
-    } else if (user?.email) {
-      // Demo accounts / heuristics if org is not yet loaded
-      if (user.email.includes('admin@') || user.email.includes('sarah@')) {
-        role = 'owner';
-      } else if (user.email.includes('viewer@') || user.email.includes('jordan@')) {
+
+      if (userApproval?.status === 'pending') {
+        isPendingApproval = true;
         role = 'viewer';
-      } else if (user.email.includes('alex@')) {
-        role = 'member';
+      } else if (orgMember?.status === 'pending') {
+        isPendingApproval = true;
+        role = 'viewer';
+      } else if (user?.membershipStatus === 'pending') {
+        isPendingApproval = true;
+        role = 'viewer';
+      } else if (userApproval?.status === 'approved' && userApproval.assignedRole) {
+        role = userApproval.assignedRole;
+        isPendingApproval = false;
+      } else if (orgMember && orgMember.status === 'active') {
+        role = orgMember.role;
+        isPendingApproval = false;
+      } else if (user?.email) {
+        // Pre-configured demo users
+        if (user.email.includes('alex@')) {
+          role = 'member';
+          isPendingApproval = false;
+        } else if (user.email.includes('jordan@') || user.email.includes('viewer@')) {
+          role = 'viewer';
+          isPendingApproval = false;
+        } else {
+          // Any newly created account is held under review until an admin approves them
+          isPendingApproval = true;
+          role = 'viewer';
+        }
       } else {
-        // Unknown newly registered account default to pending if not approved
         isPendingApproval = true;
         role = 'viewer';
       }

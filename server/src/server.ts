@@ -12,24 +12,61 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
   const httpServer = http.createServer(app);
 
-  // ─── Socket.IO (placeholder — full implementation in Phase 9) ─────────────
+  // ─── Socket.IO Real-Time Notification & Sync Server ─────────────────────
   const io = new SocketServer(httpServer, {
     cors: {
-      origin: env.CLIENT_URL,
+      origin: [
+        env.CLIENT_URL,
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/,
+        /^https?:\/\/.*(\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/,
+      ],
       methods: ['GET', 'POST'],
       credentials: true,
     },
   });
 
   io.on('connection', (socket) => {
-    logger.debug(`Socket connected: ${socket.id}`);
+    logger.info(`Socket connected: ${socket.id}`);
+
+    // Join workspace/organization room
+    socket.on('join_workspace', (workspaceId: string) => {
+      socket.join(`workspace:${workspaceId}`);
+      logger.debug(`Socket ${socket.id} joined workspace:${workspaceId}`);
+    });
+
+    // Handle new decision broadcast from a creator
+    socket.on('decision:created', (payload) => {
+      logger.info(`📢 Broadcasting new decision: ADR-${payload?.number} "${payload?.title}" by ${payload?.author?.name}`);
+      
+      const notificationData = {
+        id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        type: 'decision_created',
+        title: `New Decision Proposed`,
+        message: `${payload?.author?.name || 'A team member'} created ADR-${String(payload?.number || 1).padStart(3, '0')}: "${payload?.title}"`,
+        decisionId: payload?.id,
+        decisionNumber: payload?.number,
+        decisionTitle: payload?.title,
+        author: payload?.author,
+        team: payload?.team,
+        status: payload?.status,
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+
+      // Broadcast notification and full decision payload to all OTHER clients
+      socket.broadcast.emit('notification:new_decision', notificationData);
+      socket.broadcast.emit('decision:sync_record', payload);
+    });
+
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id}`);
     });
   });
 
   // ─── Start HTTP Server ────────────────────────────────────────────────────
-  httpServer.listen(env.PORT, () => {
+  httpServer.listen(env.PORT, '0.0.0.0', () => {
     logger.info(`🚀  DecisionVault server running on port ${env.PORT}`);
     logger.info(`📦  Environment: ${env.NODE_ENV}`);
     logger.info(`🌐  Client URL: ${env.CLIENT_URL}`);

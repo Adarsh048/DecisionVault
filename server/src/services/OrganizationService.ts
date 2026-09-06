@@ -4,6 +4,7 @@ import { userRepository } from '../repositories/UserRepository';
 import { teamRepository } from '../repositories/TeamRepository';
 import { User } from '../models/User';
 import { Team } from '../models/Team';
+import { Organization } from '../models/Organization';
 import { NotFoundError, ConflictError, ForbiddenError } from '../utils/AppError';
 import { slugify, generateUniqueSlug } from '../utils/slugify';
 import type { Role } from '../config/constants';
@@ -42,22 +43,28 @@ export class OrganizationService {
     return orgs.map((o) => o.toJSON());
   }
 
-  async update(orgId: string, data: { name?: string }) {
-    if (data.name) {
-      const slug = slugify(data.name);
-      const existing = await organizationRepository.findBySlug(slug);
-      if (existing && existing._id.toString() !== orgId) {
-        throw new ConflictError('An organization with this name already exists');
-      }
-      const org = await organizationRepository.update(orgId, {
-        name: data.name,
-        slug,
-      });
-      if (!org) throw new NotFoundError('Organization');
-      return org.toJSON();
+  async update(orgId: string, data: { name?: string; slug?: string }) {
+    let org: any = null;
+    if (mongoose.Types.ObjectId.isValid(orgId)) {
+      org = await organizationRepository.findById(orgId);
     }
-    const org = await organizationRepository.findById(orgId);
+    if (!org) org = await organizationRepository.findBySlug(orgId);
+    if (!org) org = await organizationRepository.findBySlug('acme-corp');
+    if (!org) org = await Organization.findOne({});
     if (!org) throw new NotFoundError('Organization');
+
+    if (data.name) {
+      org.name = data.name.trim();
+    }
+    if (data.slug) {
+      const cleanSlug = slugify(data.slug);
+      const existing = await organizationRepository.findBySlug(cleanSlug);
+      if (existing && existing._id.toString() !== org._id.toString()) {
+        throw new ConflictError('An organization with this slug already exists');
+      }
+      org.slug = cleanSlug;
+    }
+    await org.save();
     return org.toJSON();
   }
 
@@ -120,7 +127,13 @@ export class OrganizationService {
   }
 
   async removeMember(orgId: string, userId: string) {
-    const org = await organizationRepository.findById(orgId);
+    let org: any = null;
+    if (mongoose.Types.ObjectId.isValid(orgId)) {
+      org = await organizationRepository.findById(orgId);
+    }
+    if (!org) org = await organizationRepository.findBySlug(orgId);
+    if (!org) org = await organizationRepository.findBySlug('acme-corp');
+    if (!org) org = await Organization.findOne({});
     if (!org) throw new NotFoundError('Organization');
 
     // Cannot remove owner
@@ -128,19 +141,28 @@ export class OrganizationService {
       throw new ForbiddenError('Cannot remove the organization owner');
     }
 
-    await organizationRepository.removeMember(orgId, userId);
+    const actualOrgId = org._id.toString();
+
+    // Remove from organization members list
+    org.members = org.members.filter(
+      (m: any) => (m.userId?._id || m.userId)?.toString() !== userId
+    );
+    await org.save();
+
+    // Also pull via repository
+    await organizationRepository.removeMember(actualOrgId, userId);
 
     // Remove org from user's list
     const user = await userRepository.findById(userId);
     if (user) {
       user.organizations = user.organizations.filter(
-        (id) => id.toString() !== orgId
+        (id) => id.toString() !== actualOrgId
       );
       await user.save();
     }
 
     // Remove user from all teams in this org
-    const teams = await teamRepository.findByOrganization(orgId);
+    const teams = await teamRepository.findByOrganization(actualOrgId);
     for (const team of teams) {
       if (team.members.some((m) => m.toString() === userId)) {
         await teamRepository.removeMember(team._id.toString(), userId);
@@ -158,6 +180,9 @@ export class OrganizationService {
     }
     if (!org) {
       org = await organizationRepository.findBySlugWithMembers('acme-corp');
+    }
+    if (!org) {
+      org = await Organization.findOne({}).populate('members.userId', 'name email');
     }
     if (!org) throw new NotFoundError('Organization');
 
@@ -183,7 +208,8 @@ export class OrganizationService {
         role: m.role,
         status: m.status || 'active',
         team: userTeam ? userTeam.name : 'Platform Engineering',
-        joinedAt: m.joinedAt,
+        joinedAt: m.joinedAt || (u as any).createdAt,
+        registeredAt: (u as any).createdAt || m.joinedAt,
       };
 
       if (m.status === 'pending') {
@@ -205,9 +231,23 @@ export class OrganizationService {
           status: 'pending',
           team: 'Platform Engineering',
           registeredAt: (u as any).createdAt,
+          joinedAt: (u as any).createdAt,
         });
       }
     }
+
+    // Sort pending approvals: latest requests at the top, earlier at the bottom
+    pendingApprovals.sort((a, b) => {
+      const timeA = new Date(a.registeredAt || a.joinedAt || 0).getTime();
+      const timeB = new Date(b.registeredAt || b.joinedAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    const isOwner = org.owner.toString() === requestingUserId;
+    const requestingMember = org.members.find(
+      (m: any) => (m.userId?._id || m.userId)?.toString() === requestingUserId
+    );
+    const isAdmin = isOwner || requestingMember?.role === 'admin' || requestingMember?.role === 'owner';
 
     return {
       organization: {
@@ -216,9 +256,10 @@ export class OrganizationService {
         slug: org.slug,
         owner: org.owner.toString(),
       },
-      isOwner: org.owner.toString() === requestingUserId,
+      isOwner,
+      isAdmin,
       members: activeMembers,
-      pendingApprovals,
+      pendingApprovals: isAdmin ? pendingApprovals : [],
       teams: teams.map((t) => ({
         id: t._id.toString(),
         name: t.name,
@@ -241,10 +282,17 @@ export class OrganizationService {
     }
     if (!org) org = await organizationRepository.findBySlug(orgIdOrSlug);
     if (!org) org = await organizationRepository.findBySlug('acme-corp');
+    if (!org) org = await Organization.findOne({});
     if (!org) throw new NotFoundError('Organization');
 
-    if (org.owner.toString() !== requestingUserId) {
-      throw new ForbiddenError('Only the Organization Owner can assign roles to new accounts.');
+    const isOwner = org.owner.toString() === requestingUserId;
+    const requestingMember = org.members.find(
+      (m: any) => (m.userId?._id || m.userId)?.toString() === requestingUserId
+    );
+    const isAdmin = isOwner || requestingMember?.role === 'admin' || requestingMember?.role === 'owner';
+
+    if (!isAdmin) {
+      throw new ForbiddenError('Only an Organization Admin or Owner can assign roles to new accounts.');
     }
 
     const orgId = org._id.toString();
@@ -252,7 +300,7 @@ export class OrganizationService {
     if (!user) throw new NotFoundError('User');
 
     const existingIndex = org.members.findIndex(
-      (m: any) => m.userId.toString() === targetUserId
+      (m: any) => (m.userId?._id || m.userId)?.toString() === targetUserId
     );
 
     if (existingIndex >= 0) {
@@ -293,19 +341,32 @@ export class OrganizationService {
     }
     if (!org) org = await organizationRepository.findBySlug(orgIdOrSlug);
     if (!org) org = await organizationRepository.findBySlug('acme-corp');
+    if (!org) org = await Organization.findOne({});
     if (!org) throw new NotFoundError('Organization');
 
-    if (org.owner.toString() !== requestingUserId) {
-      throw new ForbiddenError('Only the Organization Owner can reject membership requests.');
+    const isOwner = org.owner.toString() === requestingUserId;
+    const requestingMember = org.members.find(
+      (m: any) => (m.userId?._id || m.userId)?.toString() === requestingUserId
+    );
+    const isAdmin = isOwner || requestingMember?.role === 'admin' || requestingMember?.role === 'owner';
+
+    if (!isAdmin) {
+      throw new ForbiddenError('Only an Organization Admin or Owner can reject membership requests.');
     }
 
-    org.members = org.members.filter((m: any) => m.userId.toString() !== targetUserId);
+    org.members = org.members.filter((m: any) => (m.userId?._id || m.userId)?.toString() !== targetUserId);
     await org.save();
 
+    // Also remove from any teams
+    await Team.updateMany(
+      { organizationId: org._id },
+      { $pull: { members: new mongoose.Types.ObjectId(targetUserId) } }
+    );
+
+    // Delete unapproved user so they do not reappear in allDbUsers / pendingApprovals
     const user = await userRepository.findById(targetUserId);
     if (user) {
-      user.organizations = user.organizations.filter((id) => id.toString() !== org._id.toString());
-      await user.save();
+      await User.findByIdAndDelete(targetUserId);
     }
 
     return { message: `Request for ${user ? user.name : 'user'} has been rejected.` };

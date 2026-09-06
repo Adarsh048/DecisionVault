@@ -4,6 +4,7 @@ interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
   showSubtitle?: boolean;
+  iconOnly?: boolean;
   className?: string;
   href?: string;
 }
@@ -12,52 +13,150 @@ export function Logo({
   size = 'md',
   showText = true,
   showSubtitle = false,
+  iconOnly = false,
   className = '',
-  href,
+  href = '/',
 }: LogoProps) {
-  const sizeMap = {
-    sm: { box: 'h-7 w-7', text: 'text-sm' },
-    md: { box: 'h-8 w-8', text: 'text-[15px]' },
-    lg: { box: 'h-10 w-10', text: 'text-lg' },
-    xl: { box: 'h-12 w-12', text: 'text-xl' },
-  };
+  // Dimension configurations
+  const config = {
+    sm: {
+      iconSize: 'h-7 w-7',
+      textSize: 'text-[15px]',
+      subSize: 'text-[9px]',
+      gap: 'gap-2.5',
+    },
+    md: {
+      iconSize: 'h-8 w-8 sm:h-9 sm:w-9',
+      textSize: 'text-lg sm:text-xl',
+      subSize: 'text-[10px]',
+      gap: 'gap-3',
+    },
+    lg: {
+      iconSize: 'h-11 w-11',
+      textSize: 'text-2xl',
+      subSize: 'text-[11px]',
+      gap: 'gap-3.5',
+    },
+    xl: {
+      iconSize: 'h-14 w-14',
+      textSize: 'text-3xl',
+      subSize: 'text-xs',
+      gap: 'gap-4',
+    },
+  }[size];
 
-  const currentSize = sizeMap[size];
+  // Modern Isometric Vault Emblem SVG
+  const icon = (
+    <div className={`relative shrink-0 flex items-center justify-center ${config.iconSize} group`}>
+      <svg
+        viewBox="0 0 40 40"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full drop-shadow-sm transition-transform duration-200 group-hover:scale-105"
+      >
+        <defs>
+          {/* Top illuminated prism plane */}
+          <linearGradient id="dv-grad-top" x1="20" y1="3.5" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#4E876E" />
+            <stop offset="100%" stopColor="#365B4B" />
+          </linearGradient>
+
+          {/* Left shadow prism plane */}
+          <linearGradient id="dv-grad-left" x1="6" y1="12" x2="20" y2="36.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#28483A" />
+            <stop offset="100%" stopColor="#183025" />
+          </linearGradient>
+
+          {/* Right anchor prism plane */}
+          <linearGradient id="dv-grad-right" x1="20" y1="20" x2="34" y2="36.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#223C30" />
+            <stop offset="100%" stopColor="#102018" />
+          </linearGradient>
+
+          {/* Inner core prism gradients */}
+          <linearGradient id="dv-core-top" x1="20" y1="13.5" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#A8F5CB" />
+            <stop offset="100%" stopColor="#67D59A" />
+          </linearGradient>
+          <linearGradient id="dv-core-left" x1="14.5" y1="17" x2="20" y2="26.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#4BB87F" />
+            <stop offset="100%" stopColor="#2E8657" />
+          </linearGradient>
+          <linearGradient id="dv-core-right" x1="20" y1="20" x2="25.5" y2="26.5" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#369662" />
+            <stop offset="100%" stopColor="#1E5C3A" />
+          </linearGradient>
+        </defs>
+
+        {/* ─── Outer Isometric Hexagon Vault Shell ───────────────────── */}
+        {/* Top Plane */}
+        <path
+          d="M20 3.8 L34 11.9 L20 20 L6 11.9 Z"
+          fill="url(#dv-grad-top)"
+          stroke="#68BA93"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        {/* Left Plane */}
+        <path
+          d="M6 11.9 L20 20 L20 36.2 L6 28.1 Z"
+          fill="url(#dv-grad-left)"
+          stroke="#386A51"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        {/* Right Plane */}
+        <path
+          d="M20 20 L34 11.9 L34 28.1 L20 36.2 Z"
+          fill="url(#dv-grad-right)"
+          stroke="#2A503D"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+
+        {/* ─── Architectural Convergence Grid Lines ────────────────── */}
+        <line x1="20" y1="3.8" x2="20" y2="13.5" stroke="#9EF0C2" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+        <line x1="6" y1="28.1" x2="14.5" y2="23.2" stroke="#509C76" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+        <line x1="34" y1="28.1" x2="25.5" y2="23.2" stroke="#509C76" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+
+        {/* ─── Inner Protected Vault Core (The Architectural Decision) ─ */}
+        <path d="M20 13.5 L25.5 16.7 L20 19.9 L14.5 16.7 Z" fill="url(#dv-core-top)" />
+        <path d="M14.5 16.7 L20 19.9 L20 26.3 L14.5 23.1 Z" fill="url(#dv-core-left)" />
+        <path d="M20 19.9 L25.5 16.7 L25.5 23.1 L20 26.3 Z" fill="url(#dv-core-right)" />
+
+        {/* Center Consensus Nexus Spark */}
+        <circle cx="20" cy="19.9" r="1.6" fill="#FFFFFF" className="animate-pulse" />
+      </svg>
+    </div>
+  );
+
+  if (iconOnly) {
+    if (href) {
+      return (
+        <Link to={href} className={`inline-flex items-center ${className}`} title="DecisionVault">
+          {icon}
+        </Link>
+      );
+    }
+    return <div className={`inline-flex items-center ${className}`}>{icon}</div>;
+  }
 
   const content = (
-    <div className={`flex items-center gap-2.5 select-none ${className}`}>
-      {/* ─── Architectural Vault Emblem ──────────────────────────────────── */}
-      <div
-        className={`flex items-center justify-center shrink-0 ${currentSize.box} rounded-lg bg-[#365B4B] text-white shadow-subtle`}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-4/5 w-4/5"
-        >
-          {/* Outer clean architectural hexagon/vault */}
-          <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z" strokeWidth="1.75" />
-          {/* Converging decision paths meeting at vault nexus */}
-          <path d="M12 7V17" strokeWidth="1.75" />
-          <path d="M12 12L17 9" strokeWidth="1.75" />
-          <path d="M12 12L7 9" strokeWidth="1.75" />
-        </svg>
-      </div>
+    <div className={`inline-flex items-center ${config.gap} select-none ${className}`}>
+      {icon}
 
-      {/* ─── Product Typography ─────────────────────────────────────────── */}
       {showText && (
-        <div className="flex flex-col leading-tight">
-          <div className="flex items-center gap-1.5">
-            <span className={`font-semibold tracking-tight text-foreground ${currentSize.text}`}>
-              DecisionVault
+        <div className="flex flex-col leading-none">
+          <div className="flex items-center tracking-tight">
+            <span className={`font-semibold ${config.textSize} text-[#1C1C1A] dark:text-[#F3F4F6]`}>
+              Decision
+            </span>
+            <span className={`font-extrabold ${config.textSize} text-[#365B4B] dark:text-[#78C295] ml-0.5`}>
+              Vault
             </span>
           </div>
           {showSubtitle && (
-            <span className="text-[11px] font-normal text-muted-foreground tracking-normal">
+            <span className={`${config.subSize} font-bold tracking-widest uppercase text-[#888880] dark:text-[#9A9CA6] mt-1`}>
               Architecture & Governance
             </span>
           )}
@@ -68,7 +167,7 @@ export function Logo({
 
   if (href) {
     return (
-      <Link to={href} className="inline-block transition-opacity hover:opacity-90">
+      <Link to={href} className="inline-block transition-opacity hover:opacity-95">
         {content}
       </Link>
     );
