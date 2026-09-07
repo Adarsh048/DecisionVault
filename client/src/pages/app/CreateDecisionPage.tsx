@@ -13,6 +13,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useSyncStore } from '@/store/syncStore';
 import { db } from '@/lib/db';
 import { socketService } from '@/services/socketService';
+import { useNotificationStore } from '@/store/notificationStore';
 import type { DecisionStatus } from '@/lib/constants';
 
 export function CreateDecisionPage() {
@@ -29,12 +30,13 @@ export function CreateDecisionPage() {
   const [context, setContext] = useState('');
   const [decision, setDecision] = useState('');
   const [consequences, setConsequences] = useState('');
+  const [alternatives, setAlternatives] = useState('');
   const [error, setError] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
 
   // Hydrate draft from local IndexedDB if present
   useEffect(() => {
-    db.drafts.get('new-decision-draft').then((draft) => {
+    db.drafts.get('new-decision-draft').then((draft: any) => {
       if (draft && (draft.title || draft.context || draft.decision)) {
         setTitle(draft.title || '');
         setTeam(draft.team || 'Platform Engineering');
@@ -43,6 +45,7 @@ export function CreateDecisionPage() {
         setContext(draft.context || '');
         setDecision(draft.decision || '');
         setConsequences(draft.consequences || '');
+        setAlternatives(draft.alternatives || '');
         setDraftLoaded(true);
       }
     }).catch(console.error);
@@ -62,12 +65,13 @@ export function CreateDecisionPage() {
         context,
         decision,
         consequences,
+        alternatives,
         updatedAt: new Date().toISOString(),
       }).catch(console.error);
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [title, team, status, tags, context, decision, consequences]);
+  }, [title, team, status, tags, context, decision, consequences, alternatives]);
 
   const handleSubmit = (e?: React.FormEvent, customStatus?: DecisionStatus) => {
     if (e) e.preventDefault();
@@ -86,14 +90,17 @@ export function CreateDecisionPage() {
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const initialSafeStatus: DecisionStatus = (customStatus || status) === 'draft' ? 'draft' : 'proposed';
+
     const created = addDecision({
       title: title.trim(),
       team,
-      status: customStatus || status,
+      status: initialSafeStatus,
       tags: tagList,
       context: context.trim(),
       decision: decision.trim(),
       consequences: consequences.trim() || 'No significant adverse trade-offs identified.',
+      alternatives: alternatives.trim() || undefined,
       author: {
         id: user?._id || 'u-local',
         name: user?.name || 'Authorized Engineer',
@@ -107,6 +114,18 @@ export function CreateDecisionPage() {
 
     // Broadcast real-time notification & synced record to all other connected teammates
     socketService.broadcastNewDecision(created);
+
+    // Trigger notification across local store, multi-tab bus, and for non-author peers (engineers & viewers)
+    useNotificationStore.getState().triggerOwnerProposalAlert({
+      decisionId: created.id,
+      decisionNumber: created.number,
+      decisionTitle: created.title,
+      context: created.context,
+      decisionExcerpt: created.decision,
+      team: created.team,
+      status: created.status,
+      author: created.author,
+    });
 
     navigate(`/app/decisions/${created.id}`);
   };
@@ -209,13 +228,12 @@ export function CreateDecisionPage() {
             </label>
             <select
               disabled={!permissions.canCreateDecisions}
-              value={status}
-              onChange={(e) => setStatus(e.target.value as DecisionStatus)}
+              value={status === 'draft' ? 'draft' : 'proposed'}
+              onChange={(e) => setStatus(e.target.value === 'draft' ? 'draft' : 'proposed')}
               className="w-full rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#F5F5F2] dark:bg-[#1D2026] px-3 py-2 text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF] focus:border-[#365B4B] focus:outline-none capitalize"
             >
               <option value="proposed">Proposed (Peer review)</option>
               <option value="draft">Draft (Work in progress)</option>
-              <option value="accepted">Accepted (Production approved)</option>
             </select>
           </div>
 
@@ -286,6 +304,24 @@ export function CreateDecisionPage() {
             value={consequences}
             onChange={(e) => setConsequences(e.target.value)}
             placeholder="List expected positive impacts, along with operational trade-offs and migration considerations..."
+            className="w-full rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#1D2026] p-3 text-xs leading-relaxed text-[#1C1C1A] dark:text-[#E8EAEF] placeholder-[#969690] focus:border-[#365B4B] focus:outline-none focus:bg-[#FFFFFF] dark:focus:bg-[#16181D] transition-colors"
+          />
+        </div>
+
+        {/* Section 4: Alternatives Considered (Optional) */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+            4. Alternatives Considered (Optional)
+          </label>
+          <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8]">
+            What alternative solutions or technologies did you evaluate, and why were they ruled out?
+          </p>
+          <textarea
+            rows={3}
+            disabled={!permissions.canCreateDecisions}
+            value={alternatives}
+            onChange={(e) => setAlternatives(e.target.value)}
+            placeholder="e.g. Option A: Evaluated and ruled out due to latency. Option B: Ruled out due to operational complexity..."
             className="w-full rounded-lg border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#1D2026] p-3 text-xs leading-relaxed text-[#1C1C1A] dark:text-[#E8EAEF] placeholder-[#969690] focus:border-[#365B4B] focus:outline-none focus:bg-[#FFFFFF] dark:focus:bg-[#16181D] transition-colors"
           />
         </div>

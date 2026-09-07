@@ -49,9 +49,19 @@ export function PendingAccessView() {
         if (myEntry && myEntry.status === 'active') {
           setApprovedTransition(true);
           setCheckMessage(`Approval confirmed! Granted ${myEntry.role} access.`);
+          useUserApprovalStore.getState().openWelcomeDialog({
+            id: user._id,
+            name: user.name || 'Teammate',
+            email: user.email,
+            role: myEntry.role,
+            team: myEntry.team || 'Platform Engineering',
+            reviewedBy: 'Sarah Chen (Owner)',
+            approvedAt: new Date().toISOString(),
+            welcomed: false,
+          });
           setTimeout(() => {
             window.location.reload();
-          }, 1000);
+          }, 800);
           return;
         }
       }

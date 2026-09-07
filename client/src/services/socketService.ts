@@ -30,11 +30,24 @@ class SocketService {
       this.socket.on('connect', () => {
         console.log(`[SocketService] Connected with socket ID: ${this.socket?.id}`);
         this.socket?.emit('join_workspace', workspaceId);
+        this.socket?.emit('request_recent_notifications');
       });
 
       this.socket.on('notification:new_decision', (notification: WorkspaceNotification) => {
         console.log('[SocketService] Received new decision notification:', notification);
         useNotificationStore.getState().addNotification(notification);
+      });
+
+      this.socket.on('notifications:recent', (recentNotifications: WorkspaceNotification[]) => {
+        if (Array.isArray(recentNotifications)) {
+          recentNotifications.forEach((n) => {
+            // Replay/history sync on refresh or reconnect must never trigger pop-up dialogues
+            useNotificationStore.getState().addNotification({
+              ...n,
+              acknowledgedDialog: true,
+            });
+          });
+        }
       });
 
       this.socket.on('decision:sync_record', (remoteRecord: DecisionRecord) => {
@@ -74,7 +87,6 @@ class SocketService {
       this.socket.emit('decision:created', record);
     } else {
       console.warn('[SocketService] Socket not currently connected, fallback local simulation');
-      // If socket is momentarily disconnected, we still notify locally
     }
   }
 

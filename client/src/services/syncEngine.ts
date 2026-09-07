@@ -166,20 +166,12 @@ class SyncEngine {
   }
 
   /**
-   * Seeds initial architectural decision records into IndexedDB if empty
+   * Purges any legacy seed architectural decision records from IndexedDB
    */
   private async ensureSeedData(): Promise<void> {
     try {
-      const count = await db.decisions.count();
-      if (count === 0) {
-        // Populate IndexedDB with initial decisions
-        await db.decisions.bulkPut(
-          INITIAL_DECISIONS.map((d) => ({
-            ...d,
-            synced: true,
-          }))
-        );
-      }
+      // Clean up legacy seed decisions (dec-1 through dec-5)
+      await db.decisions.where('id').anyOf(['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5']).delete();
     } catch (err) {
       console.warn('[SyncEngine] Error ensuring seed data:', err);
     }
@@ -191,9 +183,10 @@ class SyncEngine {
   async hydrateFromIndexedDB(): Promise<void> {
     try {
       const records = await db.decisions.orderBy('number').reverse().toArray();
-      if (records.length > 0) {
-        useDecisionStore.setState({ decisions: records });
-      }
+      const filtered = records.filter(
+        (d) => !['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5'].includes(d.id)
+      );
+      useDecisionStore.setState({ decisions: filtered });
     } catch (err) {
       console.warn('[SyncEngine] Error hydrating from IndexedDB:', err);
     }

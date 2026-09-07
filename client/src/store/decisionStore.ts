@@ -3,6 +3,16 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DecisionStatus } from '@/lib/constants';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/services/syncEngine';
+import { useAuthStore } from './authStore';
+
+export interface VoterRecord {
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  userRole: string;
+  option: 'up' | 'down';
+  votedAt: string;
+}
 
 export interface DecisionRecord {
   id: string;
@@ -14,6 +24,7 @@ export interface DecisionRecord {
   context: string;
   decision: string;
   consequences: string;
+  alternatives?: string;
   author: {
     id: string;
     name: string;
@@ -24,128 +35,13 @@ export interface DecisionRecord {
     up: number;
     down: number;
     userVote?: 'up' | 'down';
+    voters?: VoterRecord[];
   };
   createdAt: string;
   updatedAt: string;
 }
 
-export const INITIAL_DECISIONS: DecisionRecord[] = [
-  {
-    id: 'dec-1',
-    number: 1,
-    title: 'Adopt Hybrid CRDTs & IndexedDB for Local-First Sync',
-    status: 'accepted',
-    team: 'Platform Engineering',
-    tags: ['Architecture', 'Offline-First', 'Database', 'Realtime'],
-    context:
-      'Engineers frequently travel or experience spotty connectivity while reviewing and proposing architectural changes. Standard client-server REST APIs freeze or lose in-flight drafts when connectivity drops.',
-    decision:
-      'We will standardize on an IndexedDB local-first storage model coupled with Conflict-free Replicated Data Types (CRDTs) and WebSocket heartbeats for background bidirectional reconciliation.',
-    consequences:
-      'Zero latency on all write operations locally. Guarantees eventual consistency without database locking overhead. Requires client-side schema migration support.',
-    author: {
-      id: 'u-1',
-      name: 'Sarah Chen',
-      email: 'admin@decisionvault.io',
-      role: 'Owner & Lead Architect',
-    },
-    votes: { up: 14, down: 0 },
-    createdAt: '2026-08-28T14:20:00Z',
-    updatedAt: '2026-09-01T09:15:00Z',
-  },
-  {
-    id: 'dec-2',
-    number: 2,
-    title: 'Migrate Service-to-Service Messaging to Event-Driven WebSockets',
-    status: 'proposed',
-    team: 'Platform Engineering',
-    tags: ['WebSockets', 'Realtime', 'Infrastructure'],
-    context:
-      'Current polling mechanisms for live decision updates create excessive server load during peak collaborative review hours and introduce up to 10 seconds of sync latency.',
-    decision:
-      'Implement Socket.io rooms segregated by organizationId and teamId to broadcast real-time decision mutations, status changes, and concurrent reviewer presence.',
-    consequences:
-      'Instantaneous feedback across all open browser sessions. Lower bandwidth consumption on idle connections.',
-    author: {
-      id: 'u-2',
-      name: 'Alex Rivera',
-      email: 'alex@decisionvault.io',
-      role: 'Senior Full-Stack Engineer',
-    },
-    votes: { up: 8, down: 1 },
-    createdAt: '2026-09-02T11:45:00Z',
-    updatedAt: '2026-09-03T16:30:00Z',
-  },
-  {
-    id: 'dec-3',
-    number: 3,
-    title: 'Standardize RBAC Hierarchy: Owner, Admin, Member, Stakeholder',
-    status: 'accepted',
-    team: 'Product & Design',
-    tags: ['Security', 'RBAC', 'Compliance'],
-    context:
-      'We need distinct permission tiers so stakeholders and compliance reviewers can audit historical decisions without accidentally modifying or deleting architectural records.',
-    decision:
-      'Enforce 4 strict tiers: Owner (full admin & billing), Admin (team management), Member (engineer author & editor), and Viewer/Stakeholder (strictly read-only review with discussion rights).',
-    consequences:
-      'Satisfies SOC2 audit trail criteria. Stakeholders get uninhibited exploration without write risk.',
-    author: {
-      id: 'u-1',
-      name: 'Sarah Chen',
-      email: 'admin@decisionvault.io',
-      role: 'Owner & Lead Architect',
-    },
-    votes: { up: 19, down: 0 },
-    createdAt: '2026-08-20T10:00:00Z',
-    updatedAt: '2026-08-22T13:00:00Z',
-  },
-  {
-    id: 'dec-4',
-    number: 4,
-    title: 'Deprecate Legacy Polling Sync Engine in Favor of Push Notifications',
-    status: 'deprecated',
-    team: 'Platform Engineering',
-    tags: ['Legacy', 'Sync', 'Deprecation'],
-    context:
-      'The original v1 decision sync relied on 30-second interval polling which depleted mobile battery and led to occasional merge conflicts.',
-    decision:
-      'Deprecate HTTP long-polling and transition all clients to the WebSocket sync manager.',
-    consequences:
-      'Reduces cloud instance compute costs by 34%. Removes legacy polling routes from server.',
-    author: {
-      id: 'u-2',
-      name: 'Alex Rivera',
-      email: 'alex@decisionvault.io',
-      role: 'Senior Full-Stack Engineer',
-    },
-    votes: { up: 12, down: 2 },
-    createdAt: '2026-07-15T08:30:00Z',
-    updatedAt: '2026-08-30T10:00:00Z',
-  },
-  {
-    id: 'dec-5',
-    number: 5,
-    title: 'Universal Markdown Specification with Mermaid Diagramming',
-    status: 'draft',
-    team: 'Product & Design',
-    tags: ['Markdown', 'Diagrams', 'Documentation'],
-    context:
-      'Complex architectural decisions require sequence and architecture diagrams embedded directly inside the decision context.',
-    decision:
-      'Support GitHub Flavored Markdown and client-side Mermaid.js rendering within all decision records.',
-    consequences:
-      'Enables richer visual proposals without external image hosting dependencies.',
-    author: {
-      id: 'u-3',
-      name: 'Jordan Lee',
-      email: 'viewer@decisionvault.io',
-      role: 'Product Operations',
-    },
-    votes: { up: 5, down: 0 },
-    createdAt: '2026-09-03T17:10:00Z',
-    updatedAt: '2026-09-04T08:00:00Z',
-  },
-];
+export const INITIAL_DECISIONS: DecisionRecord[] = [];
 
 interface DecisionStore {
   decisions: DecisionRecord[];
@@ -162,7 +58,8 @@ interface DecisionStore {
   addDecision: (decision: Omit<DecisionRecord, 'id' | 'number' | 'votes' | 'createdAt' | 'updatedAt'>) => DecisionRecord;
   receiveRemoteDecision: (decision: DecisionRecord) => void;
   updateDecisionStatus: (id: string, status: DecisionStatus) => void;
-  voteDecision: (id: string, type: 'up' | 'down') => void;
+  voteDecision: (id: string, type: 'up' | 'down', voterInfo?: Partial<VoterRecord>) => void;
+  clearAllDecisions: () => void;
 }
 
 export const useDecisionStore = create<DecisionStore>()(
@@ -181,11 +78,30 @@ export const useDecisionStore = create<DecisionStore>()(
 
       addDecision: (data) => {
         const current = get().decisions;
+        const highestNumber = current.reduce((max, d) => Math.max(max, d.number || 0), 0);
+        // Ensure new decisions can only start as 'proposed' or 'draft' (cannot be 'accepted' or 'deprecated' initially)
+        const initialStatus: DecisionStatus = data.status === 'draft' ? 'draft' : 'proposed';
+
+        const authorVoter: VoterRecord = {
+          userId: data.author.id,
+          userName: data.author.name,
+          userEmail: data.author.email,
+          userRole: data.author.role,
+          option: 'up',
+          votedAt: new Date().toISOString(),
+        };
+
         const newRecord: DecisionRecord = {
           ...data,
-          id: `dec-${Date.now()}`,
-          number: current.length + 1,
-          votes: { up: 1, down: 0, userVote: 'up' },
+          status: initialStatus,
+          id: `dec-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          number: highestNumber + 1,
+          votes: {
+            up: 1,
+            down: 0,
+            userVote: 'up',
+            voters: [authorVoter],
+          },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -226,31 +142,77 @@ export const useDecisionStore = create<DecisionStore>()(
         syncEngine.enqueue('update_status', { id, status, updatedAt }).catch(console.error);
       },
 
-      voteDecision: (id, type) => {
+      voteDecision: (id, type, voterInfo) => {
         let updatedVotes: DecisionRecord['votes'] | null = null;
+        const authUser = useAuthStore.getState().user;
+        const voterId = voterInfo?.userId || authUser?._id || 'u-local';
+        const voterName = voterInfo?.userName || authUser?.name || 'Authorized Engineer';
+        const voterEmail = voterInfo?.userEmail || authUser?.email || 'engineer@decisionvault.io';
+        const voterRole = voterInfo?.userRole || authUser?.role || 'Staff Engineer';
+
         set({
           decisions: get().decisions.map((d) => {
             if (d.id !== id) return d;
-            const currentVote = d.votes.userVote;
-            let up = d.votes.up;
-            let down = d.votes.down;
 
-            if (currentVote === type) {
-              // Toggle off
-              if (type === 'up') up = Math.max(0, up - 1);
-              if (type === 'down') down = Math.max(0, down - 1);
-              updatedVotes = { up, down, userVote: undefined };
-              return { ...d, votes: updatedVotes };
+            const existingVoters: VoterRecord[] = Array.isArray(d.votes?.voters)
+              ? [...d.votes.voters]
+              : [];
+
+            const existingIdx = existingVoters.findIndex(
+              (v) => (v.userId && v.userId === voterId) || (v.userEmail && v.userEmail === voterEmail)
+            );
+
+            let newVoters: VoterRecord[];
+            let newUserVote: 'up' | 'down' | undefined = undefined;
+
+            if (existingIdx >= 0) {
+              const currentVoter = existingVoters[existingIdx];
+              if (currentVoter.option === type) {
+                // Clicking the same option toggles it off
+                newVoters = existingVoters.filter((_, idx) => idx !== existingIdx);
+                newUserVote = undefined;
+              } else {
+                // Switching choice (e.g. from 'up' to 'down' or 'down' to 'up')
+                newVoters = [
+                  ...existingVoters.slice(0, existingIdx),
+                  {
+                    ...currentVoter,
+                    userName: voterName,
+                    userRole: voterRole,
+                    option: type,
+                    votedAt: new Date().toISOString(),
+                  },
+                  ...existingVoters.slice(existingIdx + 1),
+                ];
+                newUserVote = type;
+              }
+            } else {
+              // Brand new vote by this user
+              newVoters = [
+                ...existingVoters,
+                {
+                  userId: voterId,
+                  userName: voterName,
+                  userEmail: voterEmail,
+                  userRole: voterRole,
+                  option: type,
+                  votedAt: new Date().toISOString(),
+                },
+              ];
+              newUserVote = type;
             }
 
-            if (currentVote === 'up') up = Math.max(0, up - 1);
-            if (currentVote === 'down') down = Math.max(0, down - 1);
+            const upCount = newVoters.filter((v) => v.option === 'up').length;
+            const downCount = newVoters.filter((v) => v.option === 'down').length;
 
-            if (type === 'up') up += 1;
-            if (type === 'down') down += 1;
+            updatedVotes = {
+              up: upCount,
+              down: downCount,
+              userVote: newUserVote,
+              voters: newVoters,
+            };
 
-            updatedVotes = { up, down, userVote: type };
-            return { ...d, votes: updatedVotes };
+            return { ...d, votes: updatedVotes, updatedAt: new Date().toISOString() };
           }),
         });
 
@@ -259,10 +221,26 @@ export const useDecisionStore = create<DecisionStore>()(
           syncEngine.enqueue('vote_decision', { id, type, votes: updatedVotes }).catch(console.error);
         }
       },
+
+      clearAllDecisions: () => {
+        set({ decisions: [] });
+        db.decisions.clear().catch(console.error);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem('dv-notifications-vault');
+        }
+      },
     }),
     {
       name: 'dv-decisions',
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Strictly delete legacy seed records (dec-1 through dec-5)
+          state.decisions = (state.decisions || []).filter(
+            (d) => !['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5'].includes(d.id)
+          );
+        }
+      },
     }
   )
 );

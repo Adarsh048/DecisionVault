@@ -19,6 +19,7 @@ export interface LocalDraft {
   context: string;
   decision: string;
   consequences: string;
+  alternatives?: string;
   updatedAt: string;
 }
 

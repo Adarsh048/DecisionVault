@@ -111,8 +111,8 @@ export const ROUTES = {
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
-export const APP_NAME = import.meta.env.VITE_APP_NAME || 'DecisionVault';
+export const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '/api/v1';
+export const APP_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_NAME) || 'DecisionVault';
 
 // ─── Pagination ──────────────────────────────────────────────────────────────
 

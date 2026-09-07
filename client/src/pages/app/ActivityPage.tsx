@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -6,7 +6,9 @@ import {
   Users,
   MessageSquare,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
+import { useDecisionStore } from '@/store/decisionStore';
 
 interface AuditEvent {
   id: string;
@@ -22,62 +24,34 @@ interface AuditEvent {
   timestamp: string;
 }
 
-const ACTIVITIES: AuditEvent[] = [
-  {
-    id: 'act-1',
-    type: 'status_change',
-    user: { name: 'Sarah Chen', role: 'Owner & Lead' },
-    action: 'approved and marked status as Accepted',
-    targetTitle: 'ADR-001: Adopt Hybrid CRDTs & IndexedDB for Local-First Sync',
-    targetId: 'dec-1',
-    badge: 'Accepted',
-    timestamp: '2 hours ago',
-  },
-  {
-    id: 'act-2',
-    type: 'created',
-    user: { name: 'Alex Rivera', role: 'Senior Engineer' },
-    action: 'authored and submitted proposal',
-    targetTitle: 'ADR-002: Migrate Service-to-Service Messaging to Event-Driven WebSockets',
-    targetId: 'dec-2',
-    badge: 'Proposed',
-    timestamp: 'Yesterday at 4:30 PM',
-  },
-  {
-    id: 'act-3',
-    type: 'team_update',
-    user: { name: 'Sarah Chen', role: 'Owner & Lead' },
-    action: 'configured permissions and member roster for team',
-    targetTitle: 'Platform Engineering',
-    badge: 'Team Roster',
-    timestamp: '2 days ago',
-  },
-  {
-    id: 'act-4',
-    type: 'comment',
-    user: { name: 'Jordan Lee', role: 'Stakeholder' },
-    action: 'conducted compliance review and logged verification notes on',
-    targetTitle: 'ADR-003: Standardize RBAC Hierarchy: Owner, Admin, Member, Stakeholder',
-    targetId: 'dec-3',
-    badge: 'Review Log',
-    timestamp: '3 days ago',
-  },
-  {
-    id: 'act-5',
-    type: 'status_change',
-    user: { name: 'Alex Rivera', role: 'Senior Engineer' },
-    action: 'formally superseded legacy polling architecture in',
-    targetTitle: 'ADR-004: Deprecate Legacy Polling Sync Engine',
-    targetId: 'dec-4',
-    badge: 'Deprecated',
-    timestamp: '5 days ago',
-  },
-];
-
 export function ActivityPage() {
+  const { decisions } = useDecisionStore();
   const [filter, setFilter] = useState<'all' | 'status_change' | 'created' | 'team_update'>('all');
 
-  const filtered = ACTIVITIES.filter((a) => (filter === 'all' ? true : a.type === filter));
+  const activities: AuditEvent[] = useMemo(() => {
+    return decisions.map((d) => ({
+      id: `act-${d.id}`,
+      type: d.status === 'proposed' ? 'created' : 'status_change',
+      user: { name: d.author.name, role: d.author.role },
+      action:
+        d.status === 'accepted'
+          ? 'approved and marked status as Accepted'
+          : d.status === 'deprecated'
+          ? 'marked decision as Deprecated'
+          : 'authored and submitted proposal',
+      targetTitle: `ADR-${String(d.number).padStart(3, '0')}: ${d.title}`,
+      targetId: d.id,
+      badge: d.status,
+      timestamp: new Date(d.updatedAt).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    }));
+  }, [decisions]);
+
+  const filtered = activities.filter((a) => (filter === 'all' ? true : a.type === filter));
 
   const getIcon = (type: AuditEvent['type']) => {
     switch (type) {
@@ -155,46 +129,58 @@ export function ActivityPage() {
       </div>
 
       {/* ─── Timeline List ────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] shadow-subtle divide-y divide-[#E8E8E3] dark:divide-[#2B2E36] overflow-hidden">
-        {filtered.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-start gap-4 p-5 hover:bg-[#F5F5F2] dark:hover:bg-[#1D2026] transition-colors"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F5F2] dark:bg-[#1D2026] border border-[#E8E8E3] dark:border-[#2B2E36] mt-0.5">
-              {getIcon(item.type)}
-            </div>
-
-            <div className="flex-1 space-y-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
-                  {item.user.name}
-                </span>
-                <span className="text-[11px] text-[#969690]">({item.user.role})</span>
-                <span className="text-[#6B6B66] dark:text-[#9E9EA8]">{item.action}</span>
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] p-12 text-center shadow-subtle">
+          <Clock className="h-8 w-8 mx-auto mb-2 text-[#969690] opacity-40" />
+          <p className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+            No activity logged yet
+          </p>
+          <p className="text-[11px] text-[#969690] mt-1">
+            Activity entries will appear here automatically when decisions are proposed or reviewed.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] shadow-subtle divide-y divide-[#E8E8E3] dark:divide-[#2B2E36] overflow-hidden">
+          {filtered.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start gap-4 p-5 hover:bg-[#F5F5F2] dark:hover:bg-[#1D2026] transition-colors"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F5F2] dark:bg-[#1D2026] border border-[#E8E8E3] dark:border-[#2B2E36] mt-0.5">
+                {getIcon(item.type)}
               </div>
 
-              {item.targetTitle && (
-                <p className="text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF] pt-0.5">
-                  {item.targetId ? (
-                    <Link
-                      to={`/app/decisions/${item.targetId}`}
-                      className="text-[#365B4B] dark:text-[#78C295] hover:underline inline-flex items-center gap-1"
-                    >
-                      <span>{item.targetTitle}</span>
-                      <ArrowRight className="h-3 w-3 inline" />
-                    </Link>
-                  ) : (
-                    <span>{item.targetTitle}</span>
-                  )}
-                </p>
-              )}
+              <div className="flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+                    {item.user.name}
+                  </span>
+                  <span className="text-[11px] text-[#969690]">({item.user.role})</span>
+                  <span className="text-[#6B6B66] dark:text-[#9E9EA8]">{item.action}</span>
+                </div>
 
-              <p className="text-[11px] text-[#969690] pt-1">{item.timestamp}</p>
+                {item.targetTitle && (
+                  <p className="text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF] pt-0.5">
+                    {item.targetId ? (
+                      <Link
+                        to={`/app/decisions/${item.targetId}`}
+                        className="text-[#365B4B] dark:text-[#78C295] hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>{item.targetTitle}</span>
+                        <ArrowRight className="h-3 w-3 inline" />
+                      </Link>
+                    ) : (
+                      <span>{item.targetTitle}</span>
+                    )}
+                  </p>
+                )}
+
+                <p className="text-[11px] text-[#969690] pt-1">{item.timestamp}</p>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

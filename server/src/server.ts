@@ -27,6 +27,9 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  // In-memory buffer of recent workspace notifications for connected and reconnecting clients
+  const recentNotifications: any[] = [];
+
   io.on('connection', (socket) => {
     logger.info(`Socket connected: ${socket.id}`);
 
@@ -34,26 +37,48 @@ async function bootstrap(): Promise<void> {
     socket.on('join_workspace', (workspaceId: string) => {
       socket.join(`workspace:${workspaceId}`);
       logger.debug(`Socket ${socket.id} joined workspace:${workspaceId}`);
+      // Send recent notifications on join
+      if (recentNotifications.length > 0) {
+        socket.emit('notifications:recent', recentNotifications);
+      }
+    });
+
+    socket.on('request_recent_notifications', () => {
+      socket.emit('notifications:recent', recentNotifications);
     });
 
     // Handle new decision broadcast from a creator
     socket.on('decision:created', (payload) => {
       logger.info(`📢 Broadcasting new decision: ADR-${payload?.number} "${payload?.title}" by ${payload?.author?.name}`);
       
+      const isOwner = Boolean(
+        payload?.author?.role?.toLowerCase().includes('owner') ||
+        payload?.author?.email?.toLowerCase().includes('admin@') ||
+        payload?.author?.email?.toLowerCase().includes('sarah@')
+      );
+
       const notificationData = {
         id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'decision_created',
-        title: `New Decision Proposed`,
-        message: `${payload?.author?.name || 'A team member'} created ADR-${String(payload?.number || 1).padStart(3, '0')}: "${payload?.title}"`,
+        title: isOwner ? '👑 Owner Proposed New Decision' : 'New Decision Proposed',
+        message: `${payload?.author?.name || 'A team member'} proposed ADR-${String(payload?.number || 1).padStart(3, '0')}: "${payload?.title}"`,
         decisionId: payload?.id,
         decisionNumber: payload?.number,
         decisionTitle: payload?.title,
+        context: payload?.context,
+        decisionExcerpt: payload?.decision,
+        isOwnerProposal: isOwner,
         author: payload?.author,
         team: payload?.team,
-        status: payload?.status,
+        status: payload?.status || 'proposed',
         createdAt: new Date().toISOString(),
         read: false,
+        acknowledgedDialog: false,
       };
+
+      // Add to recent buffer
+      recentNotifications.unshift(notificationData);
+      if (recentNotifications.length > 50) recentNotifications.pop();
 
       // Broadcast notification and full decision payload to all OTHER clients
       socket.broadcast.emit('notification:new_decision', notificationData);

@@ -7,10 +7,12 @@ import {
   ChevronRight,
   X,
   FileText,
+  Crown,
 } from 'lucide-react';
 import { useDecisionStore } from '@/store/decisionStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useUserApprovalStore } from '@/store/userApprovalStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import { useAuth } from '@/hooks/useAuth';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 
@@ -20,6 +22,8 @@ export function DashboardPage() {
   const { decisions } = useDecisionStore();
   const permissions = usePermissions();
   const approvals = useUserApprovalStore((state) => state.approvals);
+  const notifications = useNotificationStore((state) => state.notifications);
+  const openProposalDialog = useNotificationStore((state) => state.openProposalDialog);
 
   const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'accepted' | 'proposed' | 'draft' | 'deprecated'>('all');
 
@@ -28,6 +32,17 @@ export function DashboardPage() {
   }, []);
 
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
+
+  const activeOwnerProposal = notifications.find(
+    (n) =>
+      (n.isOwnerProposal || n.author?.role?.toLowerCase().includes('owner')) &&
+      !n.read &&
+      n.author?.email?.toLowerCase() !== user?.email?.toLowerCase() &&
+      decisions.some((d) => d.id === n.decisionId) &&
+      !['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5'].includes(n.decisionId || '') &&
+      !n.id.includes('-sim-') &&
+      !n.id.includes('init')
+  );
 
   const total = decisions.length;
   const accepted = decisions.filter((d) => d.status === 'accepted').length;
@@ -108,6 +123,49 @@ export function DashboardPage() {
             <p className="mt-0.5 text-[#6B6B66] dark:text-[#9E9EA8] leading-relaxed">
               Your profile is in review. Sarah Chen (Owner) has been notified to assign your role. You currently have read-only permissions to explore existing architectural decisions.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Active Owner Proposal Review Notice (For Engineers & Viewers) ─ */}
+      {activeOwnerProposal && (
+        <div className="flex flex-col gap-3 rounded-xl border border-[#F8DCBA] dark:border-[#5C4524] bg-gradient-to-r from-[#FEF7EE] via-[#FDF5E8] to-[#FFFFFF] dark:from-[#241F16] dark:via-[#1F1C18] dark:to-[#16181D] p-4 sm:flex-row sm:items-center sm:justify-between shadow-subtle animate-in fade-in">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FEF7EE] dark:bg-[#2F2417] text-[#D97706] dark:text-[#F3B367] border border-[#F8DCBA] dark:border-[#5C4524] shadow-xs">
+              <Crown className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="rounded bg-[#FEF7EE] dark:bg-[#2A2318] px-1.5 py-0.2 text-[10px] font-bold text-[#9A5B13] dark:text-[#F3B367] border border-[#F8DCBA] dark:border-[#5C4524]">
+                  Owner Proposal
+                </span>
+                <span className="text-[11px] font-mono text-[#29483A] dark:text-[#78C295]">
+                  ADR-{String(activeOwnerProposal.decisionNumber || 1).padStart(3, '0')}
+                </span>
+                <span className="text-[11px] text-[#969690]">
+                  by {activeOwnerProposal.author?.name || 'Sarah Chen'}
+                </span>
+              </div>
+              <h3 className="text-xs sm:text-sm font-bold text-[#1C1C1A] dark:text-[#E8EAEF] truncate mt-0.5">
+                {activeOwnerProposal.decisionTitle || activeOwnerProposal.title}
+              </h3>
+              <p className="text-[11px] text-[#6B6B66] dark:text-[#9E9EA8] truncate mt-0.5">
+                {permissions.isMember
+                  ? '⚡ Engineer review requested: Cast your vote on this proposed architectural change.'
+                  : '👁️ Open for stakeholder review and architectural alignment.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto pt-1 sm:pt-0">
+            <button
+              type="button"
+              onClick={() => openProposalDialog(activeOwnerProposal)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-3.5 py-1.5 text-xs font-semibold text-white shadow-subtle transition-colors"
+            >
+              <span>Review Proposal</span>
+              <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
         </div>
       )}
@@ -276,20 +334,43 @@ export function DashboardPage() {
           {displayDecisions.length === 0 ? (
             <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] p-8 text-center shadow-subtle">
               <FileText className="h-8 w-8 mx-auto mb-2 text-[#969690] opacity-40" />
-              <p className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
-                No {activeStatusFilter === 'proposed' ? 'under review' : activeStatusFilter} decisions found
-              </p>
-              <p className="text-[11px] text-[#969690] mt-1 mb-3">
-                There are currently no decisions matching this status in your workspace.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveStatusFilter('all')}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#365B4B] dark:text-[#78C295] hover:underline"
-              >
-                <span>Reset filter to view all decisions</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
+              {decisions.length === 0 ? (
+                <>
+                  <p className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+                    No decisions created yet
+                  </p>
+                  <p className="text-[11px] text-[#969690] mt-1 mb-4 max-w-sm mx-auto">
+                    Start recording your architecture by proposing your first architectural decision record.
+                  </p>
+                  {permissions.canCreateDecisions && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/decisions/new')}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-3.5 py-1.5 text-xs font-semibold text-white shadow-subtle transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Propose First Decision</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+                    No {activeStatusFilter === 'proposed' ? 'under review' : activeStatusFilter} decisions found
+                  </p>
+                  <p className="text-[11px] text-[#969690] mt-1 mb-3">
+                    There are currently no decisions matching this status in your workspace.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStatusFilter('all')}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#365B4B] dark:text-[#78C295] hover:underline"
+                  >
+                    <span>Reset filter to view all decisions</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] divide-y divide-[#E8E8E3] dark:divide-[#2B2E36] shadow-subtle overflow-hidden">
@@ -342,62 +423,36 @@ export function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] p-5 shadow-subtle">
-            <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-[#E8E8E3] dark:before:bg-[#2B2E36]">
-              {/* Timeline Item 1 */}
-              <div className="relative">
-                <span className="absolute -left-6 top-1 h-2 w-2 rounded-full bg-[#365B4B] ring-4 ring-[#FFFFFF] dark:ring-[#16181D]" />
-                <p className="text-[11px] font-semibold text-[#969690] uppercase tracking-wider">
-                  Today · 10:32 AM
-                </p>
-                <p className="text-xs text-[#1C1C1A] dark:text-[#E8EAEF] mt-0.5">
-                  <span className="font-semibold">Sarah Chen</span> accepted{' '}
-                  <span className="text-[#365B4B] dark:text-[#78C295]">
-                    "Adopt Hybrid CRDTs & IndexedDB"
-                  </span>
-                </p>
-              </div>
-
-              {/* Timeline Item 2 */}
-              <div className="relative">
-                <span className="absolute -left-6 top-1 h-2 w-2 rounded-full bg-[#9A5B13] ring-4 ring-[#FFFFFF] dark:ring-[#16181D]" />
-                <p className="text-[11px] font-semibold text-[#969690] uppercase tracking-wider">
-                  Today · 9:15 AM
-                </p>
-                <p className="text-xs text-[#1C1C1A] dark:text-[#E8EAEF] mt-0.5">
-                  <span className="font-semibold">Alex Rivera</span> proposed revisions to{' '}
-                  <span className="text-[#365B4B] dark:text-[#78C295]">
-                    "Migrate Service Messaging to WebSockets"
-                  </span>
-                </p>
-              </div>
-
-              {/* Timeline Item 3 */}
-              <div className="relative">
-                <span className="absolute -left-6 top-1 h-2 w-2 rounded-full bg-[#969690] ring-4 ring-[#FFFFFF] dark:ring-[#16181D]" />
-                <p className="text-[11px] font-semibold text-[#969690] uppercase tracking-wider">
-                  Yesterday
-                </p>
-                <p className="text-xs text-[#1C1C1A] dark:text-[#E8EAEF] mt-0.5">
-                  <span className="font-semibold">Jordan Lee</span> cast an approval vote on{' '}
-                  <span className="text-[#365B4B] dark:text-[#78C295]">
-                    "Standardize ADR Governance Lifecycle"
-                  </span>
-                </p>
-              </div>
-
-              {/* Timeline Item 4 */}
-              <div className="relative">
-                <span className="absolute -left-6 top-1 h-2 w-2 rounded-full bg-[#969690] ring-4 ring-[#FFFFFF] dark:ring-[#16181D]" />
-                <p className="text-[11px] font-semibold text-[#969690] uppercase tracking-wider">
-                  Aug 28
-                </p>
-                <p className="text-xs text-[#1C1C1A] dark:text-[#E8EAEF] mt-0.5">
-                  <span className="font-semibold">Workspace</span> created in Acme Corporation
-                </p>
+          {decisions.length === 0 ? (
+            <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] p-5 shadow-subtle text-center">
+              <p className="text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF]">No recent activity yet</p>
+              <p className="text-[11px] text-[#969690] mt-1">Activity will appear as you propose decisions and cast votes.</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FFFFFF] dark:bg-[#16181D] p-5 shadow-subtle">
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-[#E8E8E3] dark:before:bg-[#2B2E36]">
+                {decisions.slice(0, 4).map((d) => (
+                  <div key={d.id} className="relative">
+                    <span
+                      className={`absolute -left-6 top-1 h-2 w-2 rounded-full ring-4 ring-[#FFFFFF] dark:ring-[#16181D] ${
+                        d.status === 'accepted' ? 'bg-[#365B4B]' : 'bg-[#9A5B13]'
+                      }`}
+                    />
+                    <p className="text-[11px] font-semibold text-[#969690] uppercase tracking-wider">
+                      {new Date(d.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </p>
+                    <p className="text-xs text-[#1C1C1A] dark:text-[#E8EAEF] mt-0.5">
+                      <span className="font-semibold">{d.author.name}</span>{' '}
+                      {d.status === 'accepted' ? 'accepted' : 'proposed'}{' '}
+                      <Link to={`/app/decisions/${d.id}`} className="text-[#365B4B] dark:text-[#78C295] hover:underline">
+                        "{d.title}"
+                      </Link>
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -22,6 +22,8 @@ import {
   CheckCheck,
   ArrowUpRight,
   ChevronsUpDown,
+  Crown,
+  PartyPopper,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store/uiStore';
@@ -30,11 +32,14 @@ import { useSyncStore } from '@/store/syncStore';
 import { useUserApprovalStore } from '@/store/userApprovalStore';
 import { useOrganizationStore } from '@/store/organizationStore';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useDecisionStore } from '@/store/decisionStore';
 import { organizationService } from '@/services/organizationService';
 import { syncEngine } from '@/services/syncEngine';
 import { socketService } from '@/services/socketService';
 import { Logo } from '@/components/ui/Logo';
 import { PendingAccessView } from '@/components/auth/PendingAccessView';
+import { NewDecisionProposalModal } from '@/components/ui/NewDecisionProposalModal';
+import { RoleWelcomeModal } from '@/components/ui/RoleWelcomeModal';
 
 interface NavItem {
   label: string;
@@ -141,13 +146,63 @@ export function AppLayout() {
 
   const {
     notifications,
-    unreadCount,
     activeToast,
     markAsRead,
     markAllAsRead,
     dismissToast,
-    simulateTeammateDecision,
+    openProposalDialog,
   } = useNotificationStore();
+
+  const decisions = useDecisionStore((state) => state.decisions);
+
+  // Active decisions set for validation
+  const activeDecisionIds = useMemo(() => new Set(decisions.map((d) => d.id)), [decisions]);
+
+  // Clean, validated notifications: strictly exclude any old/deleted decisions
+  const displayNotifications = useMemo(() => {
+    const legacyIds = new Set(['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5']);
+    return notifications.filter((n) => {
+      if (n.id.includes('-sim-') || n.id.includes('init') || n.decisionId?.includes('-sim-')) return false;
+      if (n.decisionId && legacyIds.has(n.decisionId)) return false;
+      if (n.decisionId && !activeDecisionIds.has(n.decisionId)) return false;
+      return true;
+    });
+  }, [notifications, activeDecisionIds]);
+
+  const displayUnreadCount = useMemo(() => {
+    return displayNotifications.filter((n) => !n.read).length;
+  }, [displayNotifications]);
+
+  // Self-cleaning effect: permanently purge stale decision notifications from the persisted store
+  useEffect(() => {
+    const legacyIds = new Set(['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5']);
+    const hasStale = notifications.some((n) => {
+      if (n.id.includes('-sim-') || n.id.includes('init') || n.decisionId?.includes('-sim-')) return true;
+      if (n.decisionId && legacyIds.has(n.decisionId)) return true;
+      if (n.decisionId && !activeDecisionIds.has(n.decisionId)) return true;
+      return false;
+    });
+
+    if (hasStale) {
+      const cleaned = notifications.filter((n) => {
+        if (n.id.includes('-sim-') || n.id.includes('init') || n.decisionId?.includes('-sim-')) return false;
+        if (n.decisionId && legacyIds.has(n.decisionId)) return false;
+        if (n.decisionId && !activeDecisionIds.has(n.decisionId)) return false;
+        return true;
+      });
+      useNotificationStore.setState({
+        notifications: cleaned,
+        unreadCount: cleaned.filter((n) => !n.read).length,
+      });
+    }
+  }, [activeDecisionIds, notifications]);
+
+  // Check if current user was recently approved and should see the Role Welcome dialogue box
+  useEffect(() => {
+    if (user?.email && !permissions.isPendingApproval) {
+      useUserApprovalStore.getState().checkAndTriggerWelcome(user.email);
+    }
+  }, [user?.email, permissions.isPendingApproval]);
 
   // Initialize Socket.IO connection for real-time notifications
   useEffect(() => {
@@ -447,6 +502,18 @@ export function AppLayout() {
                     type="button"
                     onClick={() => {
                       setUserMenuOpen(false);
+                      useUserApprovalStore.getState().simulateApprovalWelcome(permissions.role, 'Platform Engineering');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#6B6B66] dark:text-[#9E9EA8] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B] hover:text-[#1C1C1A] dark:hover:text-[#E8EAEF] transition-colors"
+                  >
+                    <PartyPopper className="h-3.5 w-3.5 text-[#275B3D] dark:text-[#78C295]" />
+                    <span>Role Capabilities Guide</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
                       logout();
                     }}
                     className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#C53030] hover:bg-[#FDF2F2] dark:hover:bg-[#2E1919] transition-colors"
@@ -540,9 +607,9 @@ export function AppLayout() {
                 aria-label="Notifications"
               >
                 <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
+                {displayUnreadCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#365B4B] px-1 text-[9px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#16181D]">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {displayUnreadCount > 9 ? '9+' : displayUnreadCount}
                   </span>
                 )}
               </button>
@@ -560,26 +627,15 @@ export function AppLayout() {
                         <span className="font-semibold text-xs text-[#1C1C1A] dark:text-[#E8EAEF]">
                           Notifications
                         </span>
-                        {unreadCount > 0 && (
+                        {displayUnreadCount > 0 && (
                           <span className="rounded-full bg-[#E7F0EA] dark:bg-[#1F2E25] px-1.5 py-0.2 text-[10px] font-semibold text-[#29483A] dark:text-[#78C295]">
-                            {unreadCount} new
+                            {displayUnreadCount} new
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {/* Simulation button for easy single-user testing */}
-                        <button
-                          type="button"
-                          onClick={() => simulateTeammateDecision()}
-                          className="flex items-center gap-1 text-[11px] font-medium text-[#29483A] dark:text-[#78C295] hover:underline px-1 py-0.5"
-                          title="Simulate a teammate publishing an ADR"
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          <span className="hidden xs:inline">Simulate</span>
-                        </button>
-
-                        {unreadCount > 0 && (
+                        {displayUnreadCount > 0 && (
                           <button
                             type="button"
                             onClick={() => markAllAsRead()}
@@ -595,7 +651,7 @@ export function AppLayout() {
 
                     {/* Notifications List */}
                     <div className="overflow-y-auto divide-y divide-[#E8E8E3]/60 dark:divide-[#2B2E36]/60 flex-1">
-                      {notifications.length === 0 ? (
+                      {displayNotifications.length === 0 ? (
                         <div className="py-8 text-center text-[#969690] px-4">
                           <Bell className="h-7 w-7 mx-auto mb-2 opacity-40 stroke-1" />
                           <p className="text-xs font-medium text-[#1C1C1A] dark:text-[#E8EAEF]">No notifications yet</p>
@@ -604,13 +660,15 @@ export function AppLayout() {
                           </p>
                         </div>
                       ) : (
-                        notifications.map((n) => (
+                        displayNotifications.map((n) => (
                           <div
                             key={n.id}
                             onClick={() => {
                               markAsRead(n.id);
                               setNotificationsOpen(false);
-                              if (n.decisionId) {
+                              if (n.isOwnerProposal && !n.acknowledgedDialog) {
+                                openProposalDialog(n);
+                              } else if (n.decisionId) {
                                 navigate(`/app/decisions/${n.decisionId}`);
                               } else {
                                 navigate('/app/decisions');
@@ -620,15 +678,30 @@ export function AppLayout() {
                               !n.read ? 'bg-[#365B4B]/5 dark:bg-[#365B4B]/10' : ''
                             }`}
                           >
-                            <div className="h-7 w-7 rounded-full bg-[#E7F0EA] dark:bg-[#1F2E25] text-[#29483A] dark:text-[#78C295] flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">
-                              {n.author?.name ? n.author.name.charAt(0).toUpperCase() : 'D'}
+                            <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold mt-0.5 ${
+                              n.isOwnerProposal
+                                ? 'bg-[#FEF7EE] dark:bg-[#2A2318] text-[#D97706] dark:text-[#F3B367] border border-[#F8DCBA] dark:border-[#5C4524]'
+                                : 'bg-[#E7F0EA] dark:bg-[#1F2E25] text-[#29483A] dark:text-[#78C295]'
+                            }`}>
+                              {n.isOwnerProposal ? (
+                                <Crown className="h-3.5 w-3.5" />
+                              ) : (
+                                n.author?.name ? n.author.name.charAt(0).toUpperCase() : 'D'
+                              )}
                             </div>
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
-                                <span className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] truncate">
-                                  {n.title}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-xs font-semibold text-[#1C1C1A] dark:text-[#E8EAEF] truncate">
+                                    {n.title}
+                                  </span>
+                                  {n.isOwnerProposal && (
+                                    <span className="rounded bg-[#FEF7EE] dark:bg-[#2A2318] px-1 py-0.2 text-[9px] font-bold text-[#9A5B13] dark:text-[#F3B367] border border-[#F8DCBA] dark:border-[#5C4524] shrink-0">
+                                      Owner
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[10px] text-[#969690] shrink-0">
                                   {formatTimeAgo(n.createdAt)}
                                 </span>
@@ -899,6 +972,12 @@ export function AppLayout() {
           </div>
         </div>
       )}
+
+      {/* ─── Architectural Decision Proposal Dialogue Box ─────────────── */}
+      <NewDecisionProposalModal />
+
+      {/* ─── Approved Access Welcome & Role Capabilities Dialogue Box ───── */}
+      <RoleWelcomeModal />
     </div>
   );
 }

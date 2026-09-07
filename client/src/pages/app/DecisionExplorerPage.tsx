@@ -235,23 +235,46 @@ export function DecisionExplorerPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F5F5F2] dark:bg-[#1D2026] text-[#969690] mb-3">
               <FileQuestion className="h-6 w-6" />
             </div>
-            <h3 className="text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
-              No decisions found
-            </h3>
-            <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8] max-w-sm mt-1">
-              No architectural decision records match your current search or filter criteria.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch('');
-                setStatusFilter('all');
-                setTeamFilter('all');
-              }}
-              className="mt-4 text-xs font-semibold text-[#365B4B] dark:text-[#78C295] hover:underline"
-            >
-              Clear filters
-            </button>
+            {decisions.length === 0 ? (
+              <>
+                <h3 className="text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+                  No decisions created yet
+                </h3>
+                <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8] max-w-sm mt-1 mb-4">
+                  Your architecture vault is clean. Create and propose your first architectural decision record to get started.
+                </p>
+                {permissions.canCreateDecisions && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/decisions/new')}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#365B4B] hover:bg-[#29483A] px-3.5 py-1.5 text-xs font-semibold text-white shadow-subtle transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Propose First Decision</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold text-[#1C1C1A] dark:text-[#E8EAEF]">
+                  No decisions found
+                </h3>
+                <p className="text-xs text-[#6B6B66] dark:text-[#9E9EA8] max-w-sm mt-1">
+                  No architectural decision records match your current search or filter criteria.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('all');
+                    setTeamFilter('all');
+                  }}
+                  className="mt-4 text-xs font-semibold text-[#365B4B] dark:text-[#78C295] hover:underline"
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

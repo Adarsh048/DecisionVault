@@ -18,12 +18,14 @@ export function SearchPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
 
-  const popularQueries = [
-    'Hybrid CRDTs & Sync',
-    'PostgreSQL Database',
-    'WebSockets Messaging',
-    'Role-Based Access Control',
-  ];
+  const popularQueries = useMemo(() => {
+    const tagSet = new Set<string>();
+    decisions.forEach((d) => d.tags.forEach((t) => tagSet.add(t)));
+    if (tagSet.size > 0) {
+      return Array.from(tagSet).slice(0, 5);
+    }
+    return ['Architecture', 'Database', 'Security', 'Infrastructure'];
+  }, [decisions]);
 
   // Robust word-level search matcher that handles symbols like '&'
   const isMatch = (d: (typeof decisions)[0], query: string) => {
