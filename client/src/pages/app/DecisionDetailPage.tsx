@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ThumbsUp,
@@ -80,6 +80,22 @@ export function DecisionDetailPage() {
   const approvalRate = totalVotesCount > 0
     ? Math.round((upVotesCount / totalVotesCount) * 100)
     : 100;
+
+  // Automatically align decision status with majority consensus:
+  // If majority endorsed (up > down) -> 'accepted'
+  // If majority opposed (down > up) -> 'deprecated'
+  // If equal or in review -> stays 'proposed' (or 'draft')
+  useEffect(() => {
+    if (!decision) return;
+    const up = decision.votes?.up ?? 0;
+    const down = decision.votes?.down ?? 0;
+
+    if (up > down && decision.status !== 'accepted') {
+      updateDecisionStatus(decision.id, 'accepted');
+    } else if (down > up && decision.status !== 'deprecated') {
+      updateDecisionStatus(decision.id, 'deprecated');
+    }
+  }, [decision?.id, decision?.votes?.up, decision?.votes?.down, decision?.status, updateDecisionStatus]);
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -274,7 +290,9 @@ export function DecisionDetailPage() {
                     : `No reviewers have marked this as ${voterFilter === 'up' ? 'Endorsed' : 'Opposed'}.`}
                 </p>
                 <p className="text-[11px] text-[#969690]">
-                  Use the Endorse or Oppose buttons to submit your peer consensus stance.
+                  {permissions.canVoteDecisions
+                    ? 'Use the Endorse or Oppose buttons to submit your peer consensus stance.'
+                    : 'Stakeholders have read-only review access. Only authorized engineers and workspace leads can submit consensus stances.'}
                 </p>
               </div>
             ) : (
@@ -366,7 +384,11 @@ export function DecisionDetailPage() {
                     <option value="deprecated">Deprecated</option>
                   </select>
                   <p className="text-[11px] text-[#969690]">
-                    Status changes record an entry in the organization audit log.
+                    {upVotesCount > downVotesCount
+                      ? `Consensus reached: Majority endorsed (${upVotesCount} of ${totalVotesCount} reviews) → Status: Accepted.`
+                      : downVotesCount > upVotesCount
+                      ? `Consensus reached: Majority opposed (${downVotesCount} of ${totalVotesCount} reviews) → Status: Deprecated.`
+                      : 'In peer review. Majority consensus automatically governs acceptance or deprecation.'}
                   </p>
                 </div>
               ) : (
@@ -388,53 +410,82 @@ export function DecisionDetailPage() {
                 </span>
               </div>
 
-              {/* Voting buttons: Endorse & Oppose */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => voteDecision(decision.id, 'up')}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                    activeUserChoice === 'up'
-                      ? 'border-[#275B3D] bg-[#EBF5EE] text-[#275B3D] dark:border-[#284936] dark:bg-[#192B21] dark:text-[#78C295]'
-                      : 'border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#16181D] text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B]'
-                  }`}
-                  title={activeUserChoice === 'up' ? 'Click to revoke stance' : 'Endorse this proposal'}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ThumbsUp className="h-3.5 w-3.5" />
-                    <span>{activeUserChoice === 'up' ? 'Endorsed' : 'Endorse'}</span>
-                  </span>
-                  <span className="font-mono text-xs">{upVotesCount}</span>
-                </button>
+              {/* Peer Consensus Controls: Interactive for Engineers, Read-Only for Stakeholders */}
+              {permissions.canVoteDecisions ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => voteDecision(decision.id, 'up')}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                        activeUserChoice === 'up'
+                          ? 'border-[#275B3D] bg-[#EBF5EE] text-[#275B3D] dark:border-[#284936] dark:bg-[#192B21] dark:text-[#78C295]'
+                          : 'border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#16181D] text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B]'
+                      }`}
+                      title={activeUserChoice === 'up' ? 'Click to revoke stance' : 'Endorse this proposal'}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                        <span>{activeUserChoice === 'up' ? 'Endorsed' : 'Endorse'}</span>
+                      </span>
+                      <span className="font-mono text-xs">{upVotesCount}</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => voteDecision(decision.id, 'down')}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                    activeUserChoice === 'down'
-                      ? 'border-[#9E2A2B] bg-[#FDF2F2] text-[#9E2A2B] dark:border-[#4B2226] dark:bg-[#2B1B1D] dark:text-[#E07A7C]'
-                      : 'border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#16181D] text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B]'
-                  }`}
-                  title={activeUserChoice === 'down' ? 'Click to revoke stance' : 'Oppose this proposal'}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ThumbsDown className="h-3.5 w-3.5" />
-                    <span>{activeUserChoice === 'down' ? 'Opposed' : 'Oppose'}</span>
-                  </span>
-                  <span className="font-mono text-xs">{downVotesCount}</span>
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => voteDecision(decision.id, 'down')}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                        activeUserChoice === 'down'
+                          ? 'border-[#9E2A2B] bg-[#FDF2F2] text-[#9E2A2B] dark:border-[#4B2226] dark:bg-[#2B1B1D] dark:text-[#E07A7C]'
+                          : 'border-[#E8E8E3] dark:border-[#2B2E36] bg-[#FAFAF8] dark:bg-[#16181D] text-[#1C1C1A] dark:text-[#E8EAEF] hover:bg-[#F5F5F2] dark:hover:bg-[#20222B]'
+                      }`}
+                      title={activeUserChoice === 'down' ? 'Click to revoke stance' : 'Oppose this proposal'}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        <span>{activeUserChoice === 'down' ? 'Opposed' : 'Oppose'}</span>
+                      </span>
+                      <span className="font-mono text-xs">{downVotesCount}</span>
+                    </button>
+                  </div>
 
-              {activeUserChoice && (
-                <div className="flex items-center justify-between rounded-md bg-[#F5F5F2] dark:bg-[#1D2026] px-2.5 py-1.5 text-[11px] text-[#6B6B66] dark:text-[#9E9EA8]">
-                  <span>Your stance: <strong className="text-[#1C1C1A] dark:text-[#E8EAEF]">{activeUserChoice === 'up' ? 'Endorsed (Up)' : 'Opposed (Down)'}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => voteDecision(decision.id, activeUserChoice)}
-                    className="text-[10px] text-[#365B4B] dark:text-[#78C295] hover:underline"
-                  >
-                    Revoke
-                  </button>
+                  {activeUserChoice && (
+                    <div className="flex items-center justify-between rounded-md bg-[#F5F5F2] dark:bg-[#1D2026] px-2.5 py-1.5 text-[11px] text-[#6B6B66] dark:text-[#9E9EA8]">
+                      <span>Your stance: <strong className="text-[#1C1C1A] dark:text-[#E8EAEF]">{activeUserChoice === 'up' ? 'Endorsed (Up)' : 'Opposed (Down)'}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => voteDecision(decision.id, activeUserChoice)}
+                        className="text-[10px] text-[#365B4B] dark:text-[#78C295] hover:underline"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between rounded-lg border border-[#C6E4D1] dark:border-[#284936] bg-[#EBF5EE]/50 dark:bg-[#192B21]/50 px-3 py-2 text-[#275B3D] dark:text-[#78C295]">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                        <span>Endorsed</span>
+                      </span>
+                      <span className="font-mono font-semibold">{upVotesCount}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-[#F8D7DA] dark:border-[#4B2226] bg-[#FDF2F2]/50 dark:bg-[#2B1B1D]/50 px-3 py-2 text-[#9E2A2B] dark:text-[#E07A7C]">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        <span>Opposed</span>
+                      </span>
+                      <span className="font-mono font-semibold">{downVotesCount}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs text-[#969690] bg-[#F5F5F2] dark:bg-[#1D2026] p-2 rounded-md">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-[#969690]" />
+                    <span>Stakeholders have read-only access and cannot vote on proposals.</span>
+                  </div>
                 </div>
               )}
 

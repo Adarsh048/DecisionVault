@@ -110,7 +110,63 @@ for (const voter of updatedFirst.votes.voters) {
   console.log(`  - ${voter.userName} (${voter.userRole}): ${voter.option.toUpperCase()} at ${voter.votedAt}`);
 }
 
-// 6. Verify only newly created decisions are present
+// 6. Test Stakeholder / Viewer Voting Prohibition: Viewers must NOT be able to endorse or oppose
+console.log('\n--- Testing Stakeholder/Viewer Voting Prohibition ---');
+useDecisionStore.getState().voteDecision(firstDecision.id, 'up', {
+  userId: 'u-viewer',
+  userName: 'Jordan Taylor',
+  userEmail: 'viewer@decisionvault.io',
+  userRole: 'Stakeholder (Viewer)',
+});
+
+const afterViewerAttempt = useDecisionStore.getState().decisions.find((d) => d.id === firstDecision.id);
+const viewerVoted = afterViewerAttempt?.votes.voters?.some((v) => v.userName === 'Jordan Taylor');
+console.log('Did viewer/stakeholder get added to voters?', viewerVoted);
+
+if (viewerVoted) {
+  throw new Error('FAILED: Stakeholders and viewers must NOT have access to endorse or oppose options!');
+}
+console.log('✅ Stakeholder/Viewer voting prohibition verified successfully.');
+
+// 7. Test Majority Consensus Status Governance:
+// "only three members are there in it 2 out of them have endorsed it... if majority gave endorse then make it accepted otherwise vice verse"
+console.log('\n--- Testing Majority Consensus Auto-Status Alignment ---');
+
+// Case A: 3rd member (Alex Rivera) endorses -> 2 out of 3 endorse (Majority)
+useDecisionStore.getState().voteDecision(firstDecision.id, 'up', {
+  userId: 'u-2',
+  userName: 'Alex Rivera',
+  userEmail: 'alex@decisionvault.io',
+  userRole: 'Senior Full-Stack Engineer',
+});
+
+const consensusAccepted = useDecisionStore.getState().decisions.find((d) => d.id === firstDecision.id);
+console.log('Votes now:', `Up: ${consensusAccepted?.votes.up}, Down: ${consensusAccepted?.votes.down}`);
+console.log('Decision status after 2 of 3 endorsed:', consensusAccepted?.status);
+
+if (consensusAccepted?.status !== 'accepted') {
+  throw new Error(`FAILED: Expected status to be 'accepted' when majority endorsed, got: ${consensusAccepted?.status}`);
+}
+console.log('✅ Majority endorse -> Accepted verified!');
+
+// Case B: Sarah Chen changes vote to 'down' -> 2 out of 3 oppose (Majority Oppose)
+useDecisionStore.getState().voteDecision(firstDecision.id, 'down', {
+  userId: 'u-1',
+  userName: 'Sarah Chen',
+  userEmail: 'admin@decisionvault.io',
+  userRole: 'Owner & Lead Architect',
+});
+
+const consensusDeprecated = useDecisionStore.getState().decisions.find((d) => d.id === firstDecision.id);
+console.log('Votes now:', `Up: ${consensusDeprecated?.votes.up}, Down: ${consensusDeprecated?.votes.down}`);
+console.log('Decision status after majority opposed:', consensusDeprecated?.status);
+
+if (consensusDeprecated?.status !== 'deprecated') {
+  throw new Error(`FAILED: Expected status to be 'deprecated' when majority opposed, got: ${consensusDeprecated?.status}`);
+}
+console.log('✅ Majority oppose -> Deprecated verified!');
+
+// 8. Verify only newly created decisions are present
 const currentList = useDecisionStore.getState().decisions;
 console.log('\nTotal decisions present in store:', currentList.length);
 if (currentList.length !== 2) {

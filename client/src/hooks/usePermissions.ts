@@ -15,6 +15,7 @@ export interface UserPermissions {
   canCreateDecisions: boolean;
   canEditDecisions: boolean;
   canDeleteDecisions: boolean;
+  canVoteDecisions: boolean;
   canManageTeam: boolean;
   canManageSettings: boolean;
   badgeClass: string;
@@ -121,6 +122,7 @@ export function usePermissions(): UserPermissions {
       isPendingApproval,
       canCreateDecisions: !isViewer && !isPendingApproval,
       canEditDecisions: !isViewer && !isPendingApproval,
+      canVoteDecisions: !isViewer && !isPendingApproval,
       canDeleteDecisions: isAdmin,
       canManageTeam: isAdmin,
       canManageSettings: isAdmin,

@@ -145,10 +145,22 @@ export const useDecisionStore = create<DecisionStore>()(
       voteDecision: (id, type, voterInfo) => {
         let updatedVotes: DecisionRecord['votes'] | null = null;
         const authUser = useAuthStore.getState().user;
+        const voterRole = voterInfo?.userRole || authUser?.role || 'Staff Engineer';
+
+        // Viewer / Stakeholders have read-only access and cannot vote on decisions
+        const isViewerRole =
+          voterRole === 'viewer' ||
+          voterRole?.toLowerCase().includes('viewer') ||
+          voterRole?.toLowerCase().includes('stakeholder');
+
+        if (isViewerRole) {
+          console.warn('Stakeholders/Viewers have read-only access and cannot vote on decisions.');
+          return;
+        }
+
         const voterId = voterInfo?.userId || authUser?._id || 'u-local';
         const voterName = voterInfo?.userName || authUser?.name || 'Authorized Engineer';
         const voterEmail = voterInfo?.userEmail || authUser?.email || 'engineer@decisionvault.io';
-        const voterRole = voterInfo?.userRole || authUser?.role || 'Staff Engineer';
 
         set({
           decisions: get().decisions.map((d) => {
@@ -212,13 +224,33 @@ export const useDecisionStore = create<DecisionStore>()(
               voters: newVoters,
             };
 
-            return { ...d, votes: updatedVotes, updatedAt: new Date().toISOString() };
+            // Dynamic Majority Consensus Governance:
+            // If majority endorsed (up > down) -> 'accepted'
+            // If majority opposed (down > up) -> 'deprecated'
+            // If equal / no majority -> 'proposed'
+            let newStatus: DecisionStatus = d.status;
+            if (upCount > downCount) {
+              newStatus = 'accepted';
+            } else if (downCount > upCount) {
+              newStatus = 'deprecated';
+            } else if (d.status === 'accepted' || d.status === 'deprecated') {
+              newStatus = 'proposed';
+            }
+
+            return {
+              ...d,
+              status: newStatus,
+              votes: updatedVotes,
+              updatedAt: new Date().toISOString(),
+            };
           }),
         });
 
         if (updatedVotes) {
-          db.decisions.update(id, { votes: updatedVotes }).catch(console.error);
-          syncEngine.enqueue('vote_decision', { id, type, votes: updatedVotes }).catch(console.error);
+          const updatedRecord = get().decisions.find((d) => d.id === id);
+          const currentStatus = updatedRecord?.status || 'proposed';
+          db.decisions.update(id, { votes: updatedVotes, status: currentStatus }).catch(console.error);
+          syncEngine.enqueue('vote_decision', { id, type, votes: updatedVotes, status: currentStatus }).catch(console.error);
         }
       },
 
@@ -239,6 +271,21 @@ export const useDecisionStore = create<DecisionStore>()(
           state.decisions = (state.decisions || []).filter(
             (d) => !['dec-1', 'dec-2', 'dec-3', 'dec-4', 'dec-5'].includes(d.id)
           );
+
+          // Auto-align decisions to majority consensus on load/refresh:
+          // If 2+ out of members or majority endorsed (up > down) -> 'accepted'
+          // If majority opposed (down > up) -> 'deprecated'
+          state.decisions = state.decisions.map((d) => {
+            const up = d.votes?.up ?? (d.votes?.voters || []).filter((v) => v.option === 'up').length;
+            const down = d.votes?.down ?? (d.votes?.voters || []).filter((v) => v.option === 'down').length;
+
+            if (up > down && d.status !== 'accepted') {
+              return { ...d, status: 'accepted' as DecisionStatus };
+            } else if (down > up && d.status !== 'deprecated') {
+              return { ...d, status: 'deprecated' as DecisionStatus };
+            }
+            return d;
+          });
         }
       },
     }
