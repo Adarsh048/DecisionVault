@@ -71,6 +71,12 @@ export function useAuth() {
    */
   const getErrorMessage = useCallback((error: unknown): string => {
     const axiosError = error as AxiosError<ApiErrorResponse>;
+    if (axiosError.code === 'ECONNABORTED' || axiosError.message?.toLowerCase().includes('timeout')) {
+      return 'The cloud server took longer than expected to wake up from cold sleep. It is now warming up — please try again.';
+    }
+    if (axiosError.message?.toLowerCase().includes('network error')) {
+      return 'Unable to reach backend server. If Render free tier is waking up from sleep, please try again in a few seconds.';
+    }
     return (
       axiosError.response?.data?.message ||
       axiosError.message ||

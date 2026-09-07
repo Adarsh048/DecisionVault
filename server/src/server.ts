@@ -20,7 +20,7 @@ async function bootstrap(): Promise<void> {
         'http://localhost:5173',
         'http://127.0.0.1:5173',
         /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/,
-        /^https?:\/\/.*(\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/,
+        /^https?:\/\/.*(\.vercel\.app|\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/,
       ],
       methods: ['GET', 'POST'],
       credentials: true,

@@ -26,7 +26,7 @@ export function createApp(): express.Application {
         origin === env.CLIENT_URL ||
         /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
         /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/.*(\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/.test(origin);
+        /^https?:\/\/.*(\.vercel\.app|\.loca\.lt|\.ngrok-free\.app|\.trycloudflare\.com)$/.test(origin);
 
       if (isAllowed) {
         callback(null, true);
@@ -36,12 +36,23 @@ export function createApp(): express.Application {
       }
     },
     credentials: true,
+    maxAge: 86400, // 24 hours preflight cache to eliminate OPTIONS latency on every call
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   };
 
   app.use(cors(corsOptions));
   app.options('*', cors(corsOptions));
+
+  // ─── Direct Health Check for Render & Instant Client Pre-warming ─────────
+  app.get(['/', '/health', '/api/health'], (_req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      service: 'DecisionVault API',
+      timestamp: new Date().toISOString(),
+      warmed: true,
+    });
+  });
 
   // ─── Body Parsing ─────────────────────────────────────────────────────────
   app.use(express.json({ limit: '10kb' }));

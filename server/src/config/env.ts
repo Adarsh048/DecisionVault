@@ -12,7 +12,7 @@ const envSchema = z.object({
   REFRESH_TOKEN_SECRET: z.string().min(32, 'REFRESH_TOKEN_SECRET must be at least 32 characters'),
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
-  BCRYPT_ROUNDS: z.string().default('12').transform(Number),
+  BCRYPT_ROUNDS: z.string().default('10').transform(Number),
 });
 
 const parsed = envSchema.safeParse(process.env);

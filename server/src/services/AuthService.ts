@@ -49,9 +49,11 @@ export class AuthService {
       // Organization enrollment fallback should not crash registration
     }
 
-    // Generate tokens
-    const { accessToken, refreshToken } = await this.generateTokens(user);
-    const userPayload = await this.enrichUserWithRole(user);
+    // Generate tokens and enrich role concurrently
+    const [{ accessToken, refreshToken }, userPayload] = await Promise.all([
+      this.generateTokens(user),
+      this.enrichUserWithRole(user),
+    ]);
 
     return {
       user: userPayload,
@@ -76,9 +78,11 @@ export class AuthService {
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // Generate tokens
-    const { accessToken, refreshToken } = await this.generateTokens(user);
-    const userPayload = await this.enrichUserWithRole(user);
+    // Generate tokens and enrich role concurrently
+    const [{ accessToken, refreshToken }, userPayload] = await Promise.all([
+      this.generateTokens(user),
+      this.enrichUserWithRole(user),
+    ]);
 
     return {
       user: userPayload,
@@ -225,9 +229,9 @@ export class AuthService {
   private async enrichUserWithRole(user: IUser) {
     const userJson: any = user.toJSON ? user.toJSON() : { ...user };
     try {
-      const org = (await Organization.findOne({ slug: 'acme-corp' })) || (await Organization.findOne({}));
+      const org: any = (await Organization.findOne({ slug: 'acme-corp' }).lean()) || (await Organization.findOne({}).lean());
       if (org) {
-        if (org.owner.toString() === user._id.toString()) {
+        if (org.owner?.toString() === user._id.toString()) {
           userJson.role = 'owner';
           userJson.membershipStatus = 'active';
         } else {

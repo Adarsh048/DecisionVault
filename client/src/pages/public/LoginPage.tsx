@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { prewarmServer } from '@/services/api';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -41,6 +42,12 @@ export function LoginPage() {
   const { login, getErrorMessage } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [isSlowServer, setIsSlowServer] = useState(false);
+
+  // Proactively wake up Render cloud container as soon as user opens login view
+  useEffect(() => {
+    prewarmServer();
+  }, []);
 
   const {
     register,
@@ -51,6 +58,17 @@ export function LoginPage() {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   });
+
+  // Track if backend is currently waking up from cold sleep (>2.5s)
+  useEffect(() => {
+    let timer: any;
+    if (isSubmitting) {
+      timer = setTimeout(() => setIsSlowServer(true), 2500);
+    } else {
+      setIsSlowServer(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isSubmitting]);
 
   const onSubmit = async (data: LoginForm) => {
     setServerError('');
@@ -159,6 +177,14 @@ export function LoginPage() {
               <span>Sign in</span>
             )}
           </button>
+
+          {/* Render Cloud Wake-up Reassurance Banner */}
+          {isSubmitting && isSlowServer && (
+            <div className="flex items-center gap-2 rounded-lg bg-[#FEF7EE] dark:bg-[#2A2015] border border-[#F8DCBA] dark:border-[#523C1B] p-2.5 text-[11px] text-[#9A5B13] dark:text-[#E8A54B] animate-pulse">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>Connecting to cloud backend (Render free-tier instance is waking up, please allow ~15-20s)...</span>
+            </div>
+          )}
         </form>
 
         <div className="mt-5 text-center text-xs text-[#6B6B66] dark:text-[#9E9EA8]">

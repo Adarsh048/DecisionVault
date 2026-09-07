@@ -13,8 +13,26 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 60000, // 60s timeout to allow Render free tier containers to wake up without aborting
 });
+
+/**
+ * Pre-warms the Render cloud backend as soon as the user opens the site,
+ * ensuring the server is awake and hot before credentials are submitted.
+ */
+let hasPrewarmed = false;
+export function prewarmServer(): void {
+  if (hasPrewarmed) return;
+  hasPrewarmed = true;
+
+  // Fire-and-forget lightweight health ping
+  api.get('/health', { timeout: 45000 }).catch(() => {
+    // If first attempt failed or timed out, allow one retry after 3 seconds
+    setTimeout(() => {
+      api.get('/health', { timeout: 45000 }).catch(() => {});
+    }, 3000);
+  });
+}
 
 // ─── Request Interceptor: Attach Access Token ────────────────────────────────
 
